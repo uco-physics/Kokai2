@@ -90,6 +90,31 @@ export default function Step4({
         }
     }[language];
 
+    // outputFormatが無効な場合のエラーメッセージ
+    if (!outputFormat) {
+        return (
+            <div className="space-y-6">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold">{texts.title}</h2>
+                    <p className="text-gray-600 mt-2">{texts.subtitle}</p>
+                </div>
+                <div className="p-4 bg-red-50 text-red-700 rounded-lg">
+                    {language === 'ja'
+                        ? '出力形式が選択されていません。前のステップに戻ってください。'
+                        : 'Output format is not selected. Please go back to the previous step.'}
+                </div>
+                <div className="flex justify-start">
+                    <button
+                        onClick={onBack}
+                        className="px-4 py-2 text-blue-600 hover:text-blue-800"
+                    >
+                        {texts.back}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     // パスフレーズの検証
     const validateInput = () => {
         if (!passphrase) {
@@ -115,6 +140,8 @@ export default function Step4({
 
     return (
         <div className="space-y-6">
+            {console.log('Step4 outputFormat:', outputFormat)}
+            {console.log('Step4 passphrase:', passphrase)}
             <div className="text-center">
                 <h2 className="text-2xl font-bold">{texts.title}</h2>
                 <p className="text-gray-600 mt-2">{texts.subtitle}</p>
