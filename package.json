@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "ブラウザで動作する公開鍵暗号鍵ペア生成ツール",
   "private": true,
+  "homepage": "https://uco.github.io/Kokai2",
   "dependencies": {
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
@@ -21,7 +22,9 @@
     "eject": "react-scripts eject",
     "lint": "eslint src/**/*.{js,jsx}",
     "format": "prettier --write src/**/*.{js,jsx,css,md}",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -57,7 +60,7 @@
     "eslint": "^8.45.0",
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-react": "^7.32.2",
-    "gh-pages": "^6.3.0",
+    "gh-pages": "^6.1.1",
     "husky": "^8.0.3",
     "lint-staged": "^13.2.3",
     "postcss": "^8.4.27",
