@@ -16,7 +16,7 @@
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/yourusername/kokai2.git
+git clone https://github.com//kokai2.git
 cd kokai2
 
 # 依存関係のインストール
@@ -81,7 +81,7 @@ MIT License
 
 ## 作者
 
-あなたの名前 - [@yourusername](https://github.com/yourusername)
+あなたの名前 - [@](https://github.com/)
 
 ## 謝辞
 
