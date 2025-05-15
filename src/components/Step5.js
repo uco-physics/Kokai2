@@ -30,6 +30,7 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
             back: '戻る',
             generate: '生成',
             generating: '生成中...',
+            doubleClickHint: 'ダブルクリックで生成できます',
             keyTypes: {
                 rsa: 'RSA',
                 ecdsa: 'ECDSA',
@@ -63,6 +64,7 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
             back: 'Back',
             generate: 'Generate',
             generating: 'Generating...',
+            doubleClickHint: 'Double-click to generate',
             keyTypes: {
                 rsa: 'RSA',
                 ecdsa: 'ECDSA',
@@ -85,6 +87,31 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
             }
         }
     }[language];
+
+    // paramsが正しく渡されているか確認
+    if (!params || !params.keyType || !params.keySize || !params.outputFormat) {
+        return (
+            <div className="space-y-6">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold">{texts.title}</h2>
+                    <p className="text-gray-600 mt-2">{texts.subtitle}</p>
+                </div>
+                <div className="p-4 bg-red-50 text-red-700 rounded-lg">
+                    {language === 'ja'
+                        ? '必要なパラメータが選択されていません。前のステップに戻ってください。'
+                        : 'Required parameters are not selected. Please go back to the previous step.'}
+                </div>
+                <div className="flex justify-start">
+                    <button
+                        onClick={onBack}
+                        className="px-4 py-2 text-blue-600 hover:text-blue-800"
+                    >
+                        {texts.back}
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     // 生成ボタンクリック時の処理
     const handleGenerate = () => {
@@ -113,7 +140,8 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
             {/* 選択内容の表示 */}
             <div
                 className="bg-white shadow overflow-hidden sm:rounded-lg cursor-pointer"
-                onDoubleClick={handleGenerate} // ダブルクリックで生成を実行
+                onDoubleClick={handleGenerate}
+                title={texts.doubleClickHint} // ツールチップ追加
             >
                 <div className="px-4 py-5 sm:px-6">
                     <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
@@ -122,7 +150,7 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
                                 {texts.keyType}
                             </dt>
                             <dd className="mt-1 text-sm text-gray-900">
-                                {texts.keyTypes[params.keyType]}
+                                {texts.keyTypes[params.keyType] || 'N/A'}
                             </dd>
                         </div>
                         <div className="sm:col-span-1">
@@ -130,7 +158,7 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
                                 {texts.keySize}
                             </dt>
                             <dd className="mt-1 text-sm text-gray-900">
-                                {params.keySize}
+                                {params.keySize || 'N/A'}
                             </dd>
                         </div>
                         <div className="sm:col-span-1">
@@ -138,7 +166,7 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
                                 {texts.outputFormat}
                             </dt>
                             <dd className="mt-1 text-sm text-gray-900">
-                                {texts.outputFormats[params.outputFormat]}
+                                {texts.outputFormats[params.outputFormat] || 'N/A'}
                             </dd>
                         </div>
                         <div className="sm:col-span-1">
@@ -180,6 +208,7 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
                 <button
                     onClick={onBack}
                     className="px-4 py-2 text-blue-600 hover:text-blue-800"
+                    aria-label={texts.back}
                 >
                     {texts.back}
                 </button>
@@ -188,9 +217,15 @@ export default function Step5({ params, onGenerate, onBack, isGenerating, langua
                     disabled={isGenerating}
                     className={`px-6 py-2 text-white rounded-lg ${
                         isGenerating
-                            ? 'bg-blue-400 cursor-not-allowed'
-                            : 'bg-blue-600 hover:bg-blue-700'
+                            ? 'bg-green-400 cursor-not-allowed'
+                            : 'bg-green-600 hover:bg-green-700'
                     }`}
+                    aria-label={isGenerating ? texts.generating : texts.generate}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            handleGenerate();
+                        }
+                    }}
                 >
                     {isGenerating ? texts.generating : texts.generate}
                 </button>
