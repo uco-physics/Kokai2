@@ -1,166 +1,558 @@
 <!DOCTYPE html>
-<html lang='ja'>
+<html lang="ja">
 <head>
-  <meta charset='UTF-8'>
-  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-  <title>鍵ペア生成ツール (MVP)</title>
-  <!-- Tailwind CSS CDN -->
-  <script src='https://cdn.tailwindcss.com'></script>
-  <!-- React, ReactDOM CDN (開発用) -->
-  <script src='https://unpkg.com/react@18/umd/react.development.js' crossorigin></script>
-  <script src='https://unpkg.com/react-dom@18/umd/react-dom.development.js' crossorigin></script>
-  <!-- 暗号化ライブラリ -->
-  <script src='https://unpkg.com/node-forge/dist/forge.min.js'></script>
-  <script src='https://unpkg.com/openpgp@5.5.0/dist/openpgp.min.js'></script>
-  <!-- Babel for JSX -->
-  <script src='https://unpkg.com/@babel/standalone/babel.min.js'></script>
-</head>
-<body class='bg-gray-50'>
-  <div id='root'></div>
-
-  <!-- アプリ本体 -->
-  <script type='text/babel'>
-    // ArrayBufferをBase64に変換するユーティリティ
-    function arrayBufferToBase64(buffer) {
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      return window.btoa(binary);
-    }
-
-    // CryptoKeyをPEM形式に変換
-    async function exportCryptoKeyToPem(key) {
-      const exported = await window.crypto.subtle.exportKey(
-        key.type === 'public' ? 'spki' : 'pkcs8',
-        key
-      );
-      const b64 = arrayBufferToBase64(exported);
-      const type = key.type === 'public' ? 'PUBLIC KEY' : 'PRIVATE KEY';
-      const formatted = b64.match(/.{1,64}/g).join('\n');
-      return `-----BEGIN ${type}-----
-${formatted}
------END ${type}-----`;
-    }
-
-    // RSA鍵ペアを生成
-    async function generateRSAKey(modulusLength) {
-      return await window.crypto.subtle.generateKey(
-        {
-          name: 'RSA-OAEP',
-          modulusLength: modulusLength,
-          publicExponent: new Uint8Array([1, 0, 1]),
-          hash: 'SHA-256'
-        },
-        true,
-        ['encrypt', 'decrypt']
-      );
-    }
-
-    function App() {
-      const [algorithm, setAlgorithm] = React.useState('RSA');
-      const [keySize, setKeySize] = React.useState('2048');
-      const [format, setFormat] = React.useState('PEM');
-      const [publicKeyPem, setPublicKeyPem] = React.useState('');
-      const [privateKeyPem, setPrivateKeyPem] = React.useState('');
-
-      const handleGenerateClick = async () => {
-        setPublicKeyPem('');
-        setPrivateKeyPem('');
-        if (algorithm === 'RSA') {
-          const keyPair = await generateRSAKey(parseInt(keySize, 10));
-          const pubPem = await exportCryptoKeyToPem(keyPair.publicKey);
-          const privPem = await exportCryptoKeyToPem(keyPair.privateKey);
-          setPublicKeyPem(pubPem);
-          setPrivateKeyPem(privPem);
-        } else {
-          alert(algorithm + 'はMVPでは未対応です');
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公開鍵暗号鍵ペア生成ツール（Kokai2）</title>
+    
+    <!-- React と ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 暗号ライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/openpgp@5.11.0/dist/openpgp.min.js"></script>
+    
+    <!-- FileSaver.js for downloading files -->
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    
+    <!-- JSZip for creating ZIP archives -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    
+    <style>
+        /* カスタムスタイル */
+        .tooltip {
+            @apply invisible absolute;
         }
-      };
+        
+        .has-tooltip:hover .tooltip {
+            @apply visible z-50;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
 
-      // 鍵サイズ/曲線の選択肢
-      const keySizeOptions = algorithm === 'RSA'
-        ? ['2048', '3072', '4096']
-        : algorithm === 'ECDSA'
-        ? ['P-256', 'P-384']
-        : ['Ed25519', 'Ed448'];
+    <script type="text/babel">
+        // メインアプリケーションコンポーネント
+        const App = () => {
+            const [step, setStep] = React.useState(1);
+            const [keyType, setKeyType] = React.useState('');
+            const [keySize, setKeySize] = React.useState('');
+            const [outputFormat, setOutputFormat] = React.useState('');
+            const [passphrase, setPassphrase] = React.useState('');
+            const [generatedKeys, setGeneratedKeys] = React.useState(null);
+            const [isGenerating, setIsGenerating] = React.useState(false);
+            const [error, setError] = React.useState('');
+            const [language, setLanguage] = React.useState('ja');
 
-      return (
-        <div className='container mx-auto p-4'>
-          <h1 className='text-xl font-bold mb-4'>鍵ペア生成ツール (MVP)</h1>
+            // 言語切り替え用のテキスト
+            const texts = {
+                ja: {
+                    title: '公開鍵暗号鍵ペア生成ツール',
+                    step1: '暗号方式の選択',
+                    step2: '鍵サイズの選択',
+                    step3: '出力形式の選択',
+                    step4: 'オプション設定',
+                    step5: '確認と生成',
+                    generate: '生成',
+                    download: 'ダウンロード',
+                    next: '次へ',
+                    back: '戻る',
+                    // ... 他の翻訳
+                },
+                en: {
+                    title: 'Public Key Cryptography Key Pair Generator',
+                    step1: 'Select Cryptography Type',
+                    step2: 'Select Key Size',
+                    step3: 'Select Output Format',
+                    step4: 'Set Options',
+                    step5: 'Confirm and Generate',
+                    generate: 'Generate',
+                    download: 'Download',
+                    next: 'Next',
+                    back: 'Back',
+                    // ... other translations
+                }
+            };
 
-          {/* ステップ1: 暗号方式選択 */}
-          <div className='mb-4'>
-            <label className='block mb-1'>方式選択</label>
-            <select
-              value={algorithm}
-              onChange={e => setAlgorithm(e.target.value)}
-              className='border p-2'
-            >
-              <option value='RSA'>RSA</option>
-              <option value='ECDSA' disabled>ECDSA</option>
-              <option value='EdDSA' disabled>EdDSA</option>
-            </select>
-          </div>
+            // 暗号方式の選択肢
+            const keyTypes = [
+                { value: 'rsa', label: 'RSA', description: 'RSA (PKCS#1, RSA-PSS/RSA-OAEP)' },
+                { value: 'ecdsa', label: 'ECDSA', description: 'ECDSA (NIST P-256/P-384)' },
+                { value: 'eddsa', label: 'EdDSA', description: 'EdDSA (Ed25519/Ed448)' }
+            ];
 
-          {/* ステップ2: 鍵サイズ/曲線選択 */}
-          <div className='mb-4'>
-            <label className='block mb-1'>鍵サイズ/曲線</label>
-            <select
-              value={keySize}
-              onChange={e => setKeySize(e.target.value)}
-              className='border p-2'
-            >
-              {keySizeOptions.map(size => (
-                <option key={size} value={size}>{size}</option>
-              ))}
-            </select>
-          </div>
+            // 鍵サイズの選択肢（暗号方式に応じて動的に変更）
+            const getKeySizes = () => {
+                switch (keyType) {
+                    case 'rsa':
+                        return [
+                            { value: '2048', label: '2048ビット' },
+                            { value: '3072', label: '3072ビット' },
+                            { value: '4096', label: '4096ビット' }
+                        ];
+                    case 'ecdsa':
+                        return [
+                            { value: 'P-256', label: 'P-256' },
+                            { value: 'P-384', label: 'P-384' }
+                        ];
+                    case 'eddsa':
+                        return [
+                            { value: 'Ed25519', label: 'Ed25519' },
+                            { value: 'Ed448', label: 'Ed448' }
+                        ];
+                    default:
+                        return [];
+                }
+            };
 
-          {/* ステップ3: 出力形式選択 */}
-          <div className='mb-4'>
-            <label className='block mb-1'>出力形式</label>
-            <select
-              value={format}
-              onChange={e => setFormat(e.target.value)}
-              className='border p-2'
-            >
-              <option value='PEM'>PEM</option>
-              <option value='JWK' disabled>JWK</option>
-              <option value='SSH' disabled>SSH</option>
-              <option value='OpenPGP' disabled>OpenPGP</option>
-            </select>
-          </div>
+            // 出力形式の選択肢（暗号方式に応じて動的に変更）
+            const getOutputFormats = () => {
+                const formats = [
+                    { value: 'pem', label: 'PEM', description: 'PKCS#8/SPKI形式' }
+                ];
 
-          {/* 生成ボタン */}
-          <button
-            onClick={handleGenerateClick}
-            className='px-4 py-2 bg-blue-600 text-white rounded'
-          >生成</button>
+                // JWKはすべての方式で利用可能
+                formats.push({ value: 'jwk', label: 'JWK', description: 'JSON Web Key形式' });
 
-          {/* 結果表示 */}
-          {publicKeyPem && (
-            <div className='mt-6'>
-              <h2 className='font-semibold mb-1'>公開鍵</h2>
-              <textarea
-                readOnly
-                value={publicKeyPem}
-                className='w-full h-40 border p-2 mb-4'
-              />
-              <h2 className='font-semibold mb-1'>秘密鍵</h2>
-              <textarea
-                readOnly
-                value={privateKeyPem}
-                className='w-full h-40 border p-2'
-              />
-            </div>
-          )}
-        </div>
-      );
-    }
+                // SSHはRSA、ECDSA、Ed25519で利用可能
+                if (['rsa', 'ecdsa'].includes(keyType) || (keyType === 'eddsa' && keySize === 'Ed25519')) {
+                    formats.push({ value: 'ssh', label: 'SSH', description: 'OpenSSH形式' });
+                }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
-  </script>
+                // OpenPGPはすべての方式で利用可能
+                formats.push({ value: 'pgp', label: 'OpenPGP', description: 'PGP形式' });
+
+                return formats;
+            };
+
+            // 鍵生成関数
+            const generateKeyPair = async () => {
+                setIsGenerating(true);
+                setError('');
+
+                try {
+                    let keyPair;
+                    const metadata = {
+                        type: keyType,
+                        size: keySize,
+                        format: outputFormat,
+                        generated: new Date().toISOString(),
+                        hasPassphrase: !!passphrase
+                    };
+
+                    switch (keyType) {
+                        case 'rsa':
+                            keyPair = await generateRSAKeyPair(parseInt(keySize));
+                            break;
+                        case 'ecdsa':
+                            keyPair = await generateECDSAKeyPair(keySize);
+                            break;
+                        case 'eddsa':
+                            keyPair = await generateEdDSAKeyPair(keySize);
+                            break;
+                        default:
+                            throw new Error('不正な暗号方式が選択されました。');
+                    }
+
+                    // 出力形式に変換
+                    const formattedKeys = await formatKeys(keyPair, outputFormat, passphrase);
+                    setGeneratedKeys({ ...formattedKeys, metadata });
+                } catch (err) {
+                    setError(`鍵の生成中にエラーが発生しました: ${err.message}`);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            // RSA鍵ペア生成
+            const generateRSAKeyPair = async (size) => {
+                const keyPair = await window.crypto.subtle.generateKey(
+                    {
+                        name: 'RSA-OAEP',
+                        modulusLength: size,
+                        publicExponent: new Uint8Array([1, 0, 1]),
+                        hash: 'SHA-256',
+                    },
+                    true,
+                    ['encrypt', 'decrypt']
+                );
+
+                return keyPair;
+            };
+
+            // ECDSA鍵ペア生成
+            const generateECDSAKeyPair = async (curve) => {
+                const keyPair = await window.crypto.subtle.generateKey(
+                    {
+                        name: 'ECDSA',
+                        namedCurve: curve,
+                    },
+                    true,
+                    ['sign', 'verify']
+                );
+
+                return keyPair;
+            };
+
+            // EdDSA鍵ペア生成
+            const generateEdDSAKeyPair = async (curve) => {
+                // Web Crypto APIでEdDSAがサポートされていない場合は、OpenPGP.jsを使用
+                return openpgp.generateKey({
+                    type: curve === 'Ed25519' ? 'ed25519' : 'ed448',
+                    format: 'object'
+                });
+            };
+
+            // 鍵の形式変換
+            const formatKeys = async (keyPair, format, passphrase) => {
+                switch (format) {
+                    case 'pem':
+                        return formatToPEM(keyPair, passphrase);
+                    case 'jwk':
+                        return formatToJWK(keyPair);
+                    case 'ssh':
+                        return formatToSSH(keyPair);
+                    case 'pgp':
+                        return formatToPGP(keyPair, passphrase);
+                    default:
+                        throw new Error('不正な出力形式が選択されました。');
+                }
+            };
+
+            // PEM形式への変換
+            const formatToPEM = async (keyPair, passphrase) => {
+                // Web Crypto APIのキーをPEM形式に変換
+                const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+                const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+
+                const publicPem = forge.pki.publicKeyToPem(forge.pki.publicKeyFromAsn1(
+                    forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki)))
+                ));
+
+                let privatePem = forge.pki.privateKeyToPem(forge.pki.privateKeyFromAsn1(
+                    forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8)))
+                ));
+
+                // パスフレーズが指定されている場合は秘密鍵を暗号化
+                if (passphrase) {
+                    privatePem = forge.pki.encryptRsaPrivateKey(
+                        forge.pki.privateKeyFromPem(privatePem),
+                        passphrase,
+                        { algorithm: 'aes256' }
+                    );
+                }
+
+                return { publicKey: publicPem, privateKey: privatePem };
+            };
+
+            // JWK形式への変換
+            const formatToJWK = async (keyPair) => {
+                const publicJwk = await window.crypto.subtle.exportKey('jwk', keyPair.publicKey);
+                const privateJwk = await window.crypto.subtle.exportKey('jwk', keyPair.privateKey);
+
+                return {
+                    publicKey: JSON.stringify(publicJwk, null, 2),
+                    privateKey: JSON.stringify(privateJwk, null, 2)
+                };
+            };
+
+            // SSH形式への変換
+            const formatToSSH = async (keyPair) => {
+                // node-forgeを使用してSSH形式に変換
+                const publicKey = forge.ssh.publicKeyToOpenSSH(keyPair.publicKey);
+                const privateKey = forge.ssh.privateKeyToOpenSSH(keyPair.privateKey, passphrase);
+
+                return { publicKey, privateKey };
+            };
+
+            // OpenPGP形式への変換
+            const formatToPGP = async (keyPair, passphrase) => {
+                const options = {
+                    userIds: [{ name: 'Generated Key', email: 'generated@example.com' }],
+                    passphrase
+                };
+
+                const { publicKey, privateKey } = await openpgp.generateKey(options);
+                return { publicKey, privateKey };
+            };
+
+            // 鍵のダウンロード
+            const downloadKeys = async () => {
+                if (!generatedKeys) return;
+
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const prefix = `${keyType}_${keySize}_${timestamp}`;
+
+                // 個別ファイルのダウンロード
+                const saveFile = (content, filename) => {
+                    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                    saveAs(blob, filename);
+                };
+
+                // メタデータのダウンロード
+                saveFile(JSON.stringify(generatedKeys.metadata, null, 2), `${prefix}_metadata.json`);
+
+                // 公開鍵と秘密鍵のダウンロード
+                const extension = outputFormat === 'jwk' ? 'json' : outputFormat;
+                saveFile(generatedKeys.publicKey, `${prefix}_public.${extension}`);
+                saveFile(generatedKeys.privateKey, `${prefix}_private.${extension}`);
+
+                // ZIPアーカイブの作成とダウンロード
+                const zip = new JSZip();
+                zip.file(`${prefix}_metadata.json`, JSON.stringify(generatedKeys.metadata, null, 2));
+                zip.file(`${prefix}_public.${extension}`, generatedKeys.publicKey);
+                zip.file(`${prefix}_private.${extension}`, generatedKeys.privateKey);
+
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                saveAs(zipBlob, `${prefix}_keys.zip`);
+            };
+
+            // ステップコンポーネント
+            const Step1 = () => (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-bold">{texts[language].step1}</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {keyTypes.map(({ value, label, description }) => (
+                            <button
+                                key={value}
+                                onClick={() => {
+                                    setKeyType(value);
+                                    setStep(2);
+                                }}
+                                className={`p-4 border rounded-lg hover:bg-blue-50 ${
+                                    keyType === value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                                }`}
+                            >
+                                <div className="font-bold">{label}</div>
+                                <div className="text-sm text-gray-600">{description}</div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+
+            const Step2 = () => (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-bold">{texts[language].step2}</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {getKeySizes().map(({ value, label }) => (
+                            <button
+                                key={value}
+                                onClick={() => {
+                                    setKeySize(value);
+                                    setStep(3);
+                                }}
+                                className={`p-4 border rounded-lg hover:bg-blue-50 ${
+                                    keySize === value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                                }`}
+                            >
+                                <div className="font-bold">{label}</div>
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        onClick={() => setStep(1)}
+                        className="mt-4 px-4 py-2 text-blue-600 hover:text-blue-800"
+                    >
+                        {texts[language].back}
+                    </button>
+                </div>
+            );
+
+            const Step3 = () => (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-bold">{texts[language].step3}</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {getOutputFormats().map(({ value, label, description }) => (
+                            <button
+                                key={value}
+                                onClick={() => {
+                                    setOutputFormat(value);
+                                    setStep(4);
+                                }}
+                                className={`p-4 border rounded-lg hover:bg-blue-50 ${
+                                    outputFormat === value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                                }`}
+                            >
+                                <div className="font-bold">{label}</div>
+                                <div className="text-sm text-gray-600">{description}</div>
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        onClick={() => setStep(2)}
+                        className="mt-4 px-4 py-2 text-blue-600 hover:text-blue-800"
+                    >
+                        {texts[language].back}
+                    </button>
+                </div>
+            );
+
+            const Step4 = () => (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-bold">{texts[language].step4}</h2>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                                パスフレーズ（オプション）
+                            </label>
+                            <input
+                                type="password"
+                                value={passphrase}
+                                onChange={(e) => setPassphrase(e.target.value)}
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="秘密鍵を暗号化するパスフレーズを入力"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex space-x-4">
+                        <button
+                            onClick={() => setStep(3)}
+                            className="px-4 py-2 text-blue-600 hover:text-blue-800"
+                        >
+                            {texts[language].back}
+                        </button>
+                        <button
+                            onClick={() => setStep(5)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                        >
+                            {texts[language].next}
+                        </button>
+                    </div>
+                </div>
+            );
+
+            const Step5 = () => (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-bold">{texts[language].step5}</h2>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                        <dl className="space-y-2">
+                            <div>
+                                <dt className="font-medium">暗号方式:</dt>
+                                <dd>{keyType.toUpperCase()}</dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium">鍵サイズ:</dt>
+                                <dd>{keySize}</dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium">出力形式:</dt>
+                                <dd>{outputFormat.toUpperCase()}</dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium">パスフレーズ:</dt>
+                                <dd>{passphrase ? '設定済み' : 'なし'}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div className="flex space-x-4">
+                        <button
+                            onClick={() => setStep(4)}
+                            className="px-4 py-2 text-blue-600 hover:text-blue-800"
+                        >
+                            {texts[language].back}
+                        </button>
+                        <button
+                            onClick={generateKeyPair}
+                            disabled={isGenerating}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300"
+                        >
+                            {isGenerating ? '生成中...' : texts[language].generate}
+                        </button>
+                    </div>
+                </div>
+            );
+
+            // 結果表示コンポーネント
+            const Result = () => {
+                if (!generatedKeys) return null;
+
+                return (
+                    <div className="mt-8 space-y-4">
+                        <h2 className="text-xl font-bold">生成された鍵</h2>
+                        <div className="space-y-4">
+                            <div>
+                                <h3 className="font-medium">公開鍵</h3>
+                                <pre className="mt-2 p-4 bg-gray-50 rounded-lg overflow-x-auto">
+                                    {generatedKeys.publicKey}
+                                </pre>
+                            </div>
+                            <div>
+                                <h3 className="font-medium">秘密鍵</h3>
+                                <pre className="mt-2 p-4 bg-gray-50 rounded-lg overflow-x-auto">
+                                    {generatedKeys.privateKey}
+                                </pre>
+                            </div>
+                            <button
+                                onClick={downloadKeys}
+                                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                            >
+                                {texts[language].download}
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            // メインレンダリング
+            return (
+                <div className="container mx-auto px-4 py-8">
+                    <header className="mb-8">
+                        <div className="flex justify-between items-center">
+                            <h1 className="text-2xl font-bold">{texts[language].title}</h1>
+                            <button
+                                onClick={() => setLanguage(language === 'ja' ? 'en' : 'ja')}
+                                className="px-3 py-1 border rounded-md hover:bg-gray-50"
+                            >
+                                {language === 'ja' ? 'English' : '日本語'}
+                            </button>
+                        </div>
+                        <div className="mt-4 flex space-x-2">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                                <div
+                                    key={s}
+                                    className={`h-2 flex-1 rounded-full ${
+                                        s <= step ? 'bg-blue-500' : 'bg-gray-200'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+                    </header>
+
+                    <main>
+                        {error && (
+                            <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-lg">
+                                {error}
+                            </div>
+                        )}
+
+                        {step === 1 && <Step1 />}
+                        {step === 2 && <Step2 />}
+                        {step === 3 && <Step3 />}
+                        {step === 4 && <Step4 />}
+                        {step === 5 && <Step5 />}
+
+                        <Result />
+                    </main>
+
+                    <footer className="mt-8 text-center text-gray-600 text-sm">
+                        <p>© 2024 Kokai2 - 公開鍵暗号鍵ペア生成ツール</p>
+                    </footer>
+                </div>
+            );
+        };
+
+        // アプリケーションのマウント
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
-</html>
+</html> 
