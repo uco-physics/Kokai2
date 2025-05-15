@@ -74,9 +74,10 @@ const keyTypes = [
  * @param {Object} props - プロパティ
  * @param {function} props.onSelect - 選択時のコールバック
  * @param {string} props.selected - 現在選択されている値
+ * @param {function} props.onNext - 次のステップに進むコールバック
  * @param {string} props.language - 表示言語
  */
-export default function Step1({ onSelect, selected, language }) {
+export default function Step1({ onSelect, selected, onNext, language }) {
     const [showDetails, setShowDetails] = useState(null);
 
     // 言語に応じたテキストを取得
@@ -87,7 +88,8 @@ export default function Step1({ onSelect, selected, language }) {
             details: '詳細',
             useCases: '主な用途',
             security: 'セキュリティレベル',
-            close: '閉じる'
+            close: '閉じる',
+            next: '次へ'
         },
         en: {
             title: 'Select Cryptography Type',
@@ -95,7 +97,8 @@ export default function Step1({ onSelect, selected, language }) {
             details: 'Details',
             useCases: 'Use Cases',
             security: 'Security Level',
-            close: 'Close'
+            close: 'Close',
+            next: 'Next'
         }
     }[language];
 
@@ -111,6 +114,17 @@ export default function Step1({ onSelect, selected, language }) {
                     <div key={type.value} className="relative">
                         <button
                             onClick={() => onSelect(type.value)}
+                            onDoubleClick={() => {
+                                if (selected) {
+                                    onNext();
+                                } else {
+                                    alert(
+                                        language === 'ja'
+                                            ? '暗号方式を選択してください'
+                                            : 'Please select a cryptography type'
+                                    );
+                                }
+                            }}
                             className={`w-full p-4 border rounded-lg hover:bg-blue-50 transition-colors ${
                                 selected === type.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
                             }`}
@@ -129,6 +143,27 @@ export default function Step1({ onSelect, selected, language }) {
                         </button>
                     </div>
                 ))}
+            </div>
+
+            {/* 次へボタン */}
+            <div className="text-center mt-6">
+                <button
+                    onClick={() => {
+                        if (selected) {
+                            onNext();
+                        } else {
+                            alert(
+                                language === 'ja'
+                                    ? '暗号方式を選択してください'
+                                    : 'Please select a cryptography type'
+                            );
+                        }
+                    }}
+                    disabled={!selected}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+                >
+                    {texts.next}
+                </button>
             </div>
 
             {/* 詳細モーダル */}
@@ -184,4 +219,4 @@ export default function Step1({ onSelect, selected, language }) {
             )}
         </div>
     );
-} 
+}
