@@ -52,19 +52,6 @@ export default function App() {
                 throw new Error(validation.message);
             }
 
-    // 鍵生成処理
-    const handleGenerate = async () => {
-        setIsGenerating(true);
-        try {
-            // パラメータをまとめる
-            const params = { keyType, keySize, outputFormat, passphrase };
-
-            // バリデーション（念のため再確認）
-            const validation = validateAll(params);
-            if (!validation.isValid) {
-                throw new Error(validation.message);
-            }
-
             // 鍵生成
             let keyPair;
             switch (keyType) {
@@ -306,7 +293,3 @@ export default function App() {
         </div>
     );
 }
-
-
-
-
