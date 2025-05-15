@@ -1,116 +1,90 @@
-# 公開鍵暗号鍵ペア生成ツール（Kokai2）
+# Kokai2 - 公開鍵生成ツール
 
-このプロジェクトは、ブラウザ上でRSA、ECDSA、EdDSAの鍵ペアを生成するWebアプリケーションです。GitHub Pages上で動作し、サーバーレスで使用できます。
+ブラウザで動作する公開鍵暗号鍵ペア生成ツールです。RSA、ECDSA、EdDSAの鍵ペアを生成し、PEM、JWK、SSH、OpenPGP形式で出力できます。
 
-## 機能
+## 特徴
 
-- **対応暗号方式**:
-  - RSA (2048/3072/4096ビット)
-  - ECDSA (P-256/P-384)
-  - EdDSA (Ed25519/Ed448)
+- 🔐 複数の暗号方式サポート（RSA、ECDSA、EdDSA）
+- 📄 多様な出力形式（PEM、JWK、SSH、OpenPGP）
+- 🌐 ブラウザ内で完結（サーバーに情報を送信しない）
+- 🎨 モダンなUI（Tailwind CSS）
+- 🌍 多言語対応（日本語/英語）
+- ♿ アクセシビリティ対応
+- 🌙 ダークモード対応
 
-- **出力形式**:
-  - PEM (PKCS#8, SPKI)
-  - JWK (JSON Web Key)
-  - SSH
-  - OpenPGP
-
-- **その他の機能**:
-  - パスフレーズによる秘密鍵の保護
-  - 複数の出力形式でのダウンロード
-  - メタデータ付きZIPダウンロード
-
-## 使用方法
-
-1. ブラウザで https://[username].github.io/Kokai2 にアクセス
-2. 暗号方式を選択（RSA、ECDSA、EdDSA）
-3. 鍵サイズを選択（例：RSA 2048ビット）
-4. 出力形式を選択（PEM、JWK、SSH、OpenPGP）
-5. 必要に応じてパスフレーズを設定
-6. 「生成」ボタンをクリック
-7. 生成された鍵をダウンロード
-
-## 開発者向け情報
-
-### プロジェクト構造
-```
-Kokai2/
-├── index.html      # メインアプリケーション（HTML/CSS/JS）
-└── README.md       # このファイル
-
-# 将来的な拡張時の推奨構造:
-Kokai2/
-├── src/
-│   ├── components/
-│   │   ├── KeyGenForm.js
-│   │   ├── ResultDisplay.js
-│   │   └── TestPanel.js
-│   ├── crypto/
-│   │   ├── rsa.js
-│   │   ├── ecdsa.js
-│   │   └── eddsa.js
-│   └── utils/
-│       ├── format.js
-│       └── validation.js
-├── index.html
-└── README.md
-```
-
-### ローカルでの開発方法
-
-1. リポジトリのクローン:
-   ```bash
-   git clone https://github.com/[username]/Kokai2.git
-   cd Kokai2
-   ```
-
-2. 開発:
-   - VS CodeなどのエディタでIndex.htmlを編集
-   - ブラウザで直接index.htmlを開いてテスト（file://パス）
-   - DevTools（F12）でコンソールログやエラーを確認
-
-3. GitHub Pagesへのデプロイ:
-   ```bash
-   git add .
-   git commit -m "更新内容の説明"
-   git push origin main
-   ```
-   - GitHub上でSettings → Pages → Source を「main」に設定
-
-### 鍵の検証方法
-
-生成された鍵は以下のコマンドで検証できます：
+## セットアップ
 
 ```bash
-# RSA鍵の検証
-openssl rsa -in private.pem -check
-openssl rsa -in public.pem -pubin -text
+# リポジトリのクローン
+git clone https://github.com/yourusername/kokai2.git
+cd kokai2
 
-# ECDSA鍵の検証
-openssl ec -in private.pem -check
-openssl ec -in public.pem -pubin -text
+# 依存関係のインストール
+npm install
 
-# Ed25519鍵の検証（OpenSSL 1.1.1以降）
-openssl pkey -in private.pem -text
+# 開発サーバーの起動
+npm start
 ```
 
-## 技術スタック
+## 使用技術
 
-- **フロントエンド**:
-  - React (CDN経由)
-  - Tailwind CSS (CDN経由)
-  
-- **暗号ライブラリ**:
-  - Web Crypto API
-  - node-forge (CDN経由)
-  - openpgp.js (CDN経由)
+- React 18
+- Tailwind CSS
+- node-forge
+- OpenPGP.js
+- Web Crypto API
 
-## セキュリティ注意事項
+## セキュリティ
 
-- 生成された鍵は全てブラウザ内で生成され、サーバーには送信されません
-- パスフレーズで保護された秘密鍵は、AES-256-CBCで暗号化されます
-- 重要な用途には、適切なセキュリティ評価を受けた専用ツールの使用を推奨します
+- 全ての処理はブラウザ内で完結し、サーバーには一切データを送信しません
+- Web Crypto APIを使用して暗号学的に安全な乱数を生成
+- パスフレーズによる秘密鍵の保護をサポート
+
+## 対応ブラウザ
+
+- Chrome 69以降
+- Firefox 60以降
+- Safari 12.1以降
+- Edge 79以降
+
+## 開発
+
+```bash
+# テストの実行
+npm test
+
+# コードの整形
+npm run format
+
+# リントチェック
+npm run lint
+
+# ビルド
+npm run build
+```
 
 ## ライセンス
 
-MITライセンスの下で公開されています。詳細は[LICENSE](LICENSE)ファイルを参照してください。
+MIT License
+
+## 注意事項
+
+このツールは教育目的および一般的な用途向けに開発されています。重要なシステムでの使用には、適切なセキュリティ評価を受けた専用ツールの使用を検討してください。
+
+## コントリビューション
+
+1. このリポジトリをフォーク
+2. 新しいブランチを作成 (`git checkout -b feature/amazing-feature`)
+3. 変更をコミット (`git commit -m 'Add some amazing feature'`)
+4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
+5. プルリクエストを作成
+
+## 作者
+
+あなたの名前 - [@yourusername](https://github.com/yourusername)
+
+## 謝辞
+
+- [node-forge](https://github.com/digitalbazaar/forge)
+- [OpenPGP.js](https://github.com/openpgpjs/openpgpjs)
+- [Tailwind CSS](https://tailwindcss.com/)
