@@ -136,6 +136,15 @@ export default function Step4({
                             type={showPassword ? 'text' : 'password'}
                             value={passphrase}
                             onChange={(e) => onSelect(e.target.value)}
+                            onDoubleClick={() => {
+                                if (!passphrase || (passphrase === confirmPassphrase && validatePassphrase({ outputFormat, passphrase }).isValid)) {
+                                    onNext();
+                                } else if (passphrase !== confirmPassphrase) {
+                                    setError(texts.errorMatch);
+                                } else {
+                                    setError(texts.errorLength);
+                                }
+                            }}
                             className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                             placeholder={texts.passphrasePlaceholder}
                         />
@@ -158,6 +167,15 @@ export default function Step4({
                             type={showPassword ? 'text' : 'password'}
                             value={confirmPassphrase}
                             onChange={(e) => setConfirmPassphrase(e.target.value)}
+                            onDoubleClick={() => {
+                                if (!passphrase || (passphrase === confirmPassphrase && validatePassphrase({ outputFormat, passphrase }).isValid)) {
+                                    onNext();
+                                } else if (passphrase !== confirmPassphrase) {
+                                    setError(texts.errorMatch);
+                                } else {
+                                    setError(texts.errorLength);
+                                }
+                            }}
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                             placeholder={texts.confirmPlaceholder}
                         />
@@ -194,4 +212,4 @@ export default function Step4({
             </div>
         </div>
     );
-} 
+}

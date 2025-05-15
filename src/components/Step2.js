@@ -99,9 +99,10 @@ const keySizes = {
  * @param {function} props.onSelect - 選択時のコールバック
  * @param {string} props.selected - 現在選択されている値
  * @param {function} props.onBack - 戻るボタンのコールバック
+ * @param {function} props.onNext - 次のステップに進むコールバック
  * @param {string} props.language - 表示言語
  */
-export default function Step2({ keyType, onSelect, selected, onBack, language }) {
+export default function Step2({ keyType, onSelect, selected, onBack, onNext, language }) {
     const [showDetails, setShowDetails] = useState(null);
 
     // 言語に応じたテキストを取得
@@ -115,6 +116,7 @@ export default function Step2({ keyType, onSelect, selected, onBack, language })
             compatibility: '互換性',
             recommendation: '推奨用途',
             back: '戻る',
+            next: '次へ',
             close: '閉じる'
         },
         en: {
@@ -126,15 +128,19 @@ export default function Step2({ keyType, onSelect, selected, onBack, language })
             compatibility: 'Compatibility',
             recommendation: 'Recommended Use',
             back: 'Back',
+            next: 'Next',
             close: 'Close'
         }
     }[language];
 
     // 選択可能な鍵サイズを取得
     const availableSizes = keySizes[keyType] || [];
+    console.log('Step2 keyType:', keyType); // デバッグ用
+    console.log('Step2 availableSizes:', availableSizes); // デバッグ用
 
     return (
         <div className="space-y-6">
+            {console.log('Step2 selected:', selected)} {/* デバッグ用 */}
             <div className="text-center">
                 <h2 className="text-2xl font-bold">{texts.title}</h2>
                 <p className="text-gray-600 mt-2">{texts.subtitle}</p>
@@ -145,6 +151,17 @@ export default function Step2({ keyType, onSelect, selected, onBack, language })
                     <div key={size.value} className="relative">
                         <button
                             onClick={() => onSelect(size.value)}
+                            onDoubleClick={() => {
+                                if (selected) {
+                                    onNext();
+                                } else {
+                                    alert(
+                                        language === 'ja'
+                                            ? '鍵サイズを選択してください'
+                                            : 'Please select a key size'
+                                    );
+                                }
+                            }}
                             className={`w-full p-4 border rounded-lg hover:bg-blue-50 transition-colors ${
                                 selected === size.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
                             }`}
@@ -165,12 +182,29 @@ export default function Step2({ keyType, onSelect, selected, onBack, language })
                 ))}
             </div>
 
-            <div className="flex justify-start">
+            <div className="flex justify-between">
                 <button
                     onClick={onBack}
                     className="px-4 py-2 text-blue-600 hover:text-blue-800"
                 >
                     {texts.back}
+                </button>
+                <button
+                    onClick={() => {
+                        if (selected) {
+                            onNext();
+                        } else {
+                            alert(
+                                language === 'ja'
+                                    ? '鍵サイズを選択してください'
+                                    : 'Please select a key size'
+                            );
+                        }
+                    }}
+                    disabled={!selected}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+                >
+                    {texts.next}
                 </button>
             </div>
 
@@ -235,4 +269,4 @@ export default function Step2({ keyType, onSelect, selected, onBack, language })
             )}
         </div>
     );
-} 
+}
