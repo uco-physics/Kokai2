@@ -1,12 +1,9 @@
-name: Deploy to GitHub Pages 
-
+name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      - 'gh-pages'
-
-
-# トリガーするブランチ（必要に応じて変更）
+      - development
+ # トリガーブランチをdevelopmentに変更
 
 jobs:
   deploy:
@@ -20,7 +17,9 @@ jobs:
       - run: npm install
       - run: npm run build
         env:
-          CI: false  # 警告をエラーとして扱わない
+          CI: false
       - uses: peaceiris/actions-gh-pages@v3
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./build
+          publish_branch: gh-pages  # デプロイ先はgh-pagesのまま
