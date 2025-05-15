@@ -135,12 +135,9 @@ export default function Step2({ keyType, onSelect, selected, onBack, onNext, lan
 
     // 選択可能な鍵サイズを取得
     const availableSizes = keySizes[keyType] || [];
-    console.log('Step2 keyType:', keyType); // デバッグ用
-    console.log('Step2 availableSizes:', availableSizes); // デバッグ用
 
     return (
         <div className="space-y-6">
-            {console.log('Step2 selected:', selected)} {/* デバッグ用 */}
             <div className="text-center">
                 <h2 className="text-2xl font-bold">{texts.title}</h2>
                 <p className="text-gray-600 mt-2">{texts.subtitle}</p>

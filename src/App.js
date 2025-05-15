@@ -7,7 +7,7 @@ import Step2 from './components/Step2';
 import Step3 from './components/Step3';
 import Step4 from './components/Step4';
 import Step5 from './components/Step5';
-import { generateMetadata } from './utils/metadata';
+import { createMetadata } from './utils/metadata'; // 修正
 import { validateAll } from './utils/errorHandler';
 import {
     generateRSAKeyPair,
@@ -19,9 +19,7 @@ import {
     convertToOpenPGP
 } from './utils/crypto';
 
-/**
- * アプリケーションコンポーネント
- */
+
 export default function App() {
     const [step, setStep] = useState(1);
     const [keyType, setKeyType] = useState('');
@@ -40,6 +38,19 @@ export default function App() {
     const handleBack = () => {
         setStep(prev => Math.max(prev - 1, 1));
     };
+
+    // 鍵生成処理
+    const handleGenerate = async () => {
+        setIsGenerating(true);
+        try {
+            // パラメータをまとめる
+            const params = { keyType, keySize, outputFormat, passphrase };
+
+            // バリデーション（念のため再確認）
+            const validation = validateAll(params);
+            if (!validation.isValid) {
+                throw new Error(validation.message);
+            }
 
     // 鍵生成処理
     const handleGenerate = async () => {
@@ -94,7 +105,7 @@ export default function App() {
             }
 
             // メタデータ生成
-            const metadata = generateMetadata({
+            const metadata = createMetadata({ // 修正
                 keyType,
                 keySize,
                 outputFormat,
@@ -295,3 +306,7 @@ export default function App() {
         </div>
     );
 }
+
+
+
+
