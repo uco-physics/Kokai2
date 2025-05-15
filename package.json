@@ -1,5 +1,5 @@
 {
-  "name": "kokai2",
+  "name": "Kokai2",
   "version": "1.0.0",
   "description": "ブラウザで動作する公開鍵暗号鍵ペア生成ツール",
   "private": true,

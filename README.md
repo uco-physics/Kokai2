@@ -16,8 +16,8 @@
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com//kokai2.git
-cd kokai2
+git clone https://github.com//Kokai2.git
+cd Kokai2
 
 # 依存関係のインストール
 npm install
