@@ -2,6 +2,8 @@
  * 暗号鍵生成に関するユーティリティ関数群
  * Web Crypto API、node-forge、openpgp.jsを使用
  */
+import * as openpgp from 'openpgp';
+import * as forge from 'node-forge';
 
 /**
  * RSA鍵ペアを生成
@@ -10,6 +12,11 @@
  */
 export async function generateRSAKeyPair(size) {
     try {
+        // 鍵サイズの検証
+        if (![2048, 3072, 4096].includes(size)) {
+            throw new Error('RSAの鍵サイズは2048/3072/4096ビットのみ対応しています');
+        }
+
         return await window.crypto.subtle.generateKey(
             {
                 name: 'RSA-OAEP',
@@ -22,7 +29,7 @@ export async function generateRSAKeyPair(size) {
         );
     } catch (error) {
         console.error('RSA鍵生成エラー:', error);
-        throw new Error(`RSA鍵の生成に失敗しました: ${error.message}`);
+        throw error;
     }
 }
 
@@ -33,6 +40,11 @@ export async function generateRSAKeyPair(size) {
  */
 export async function generateECDSAKeyPair(curve) {
     try {
+        // 曲線の検証
+        if (!['P-256', 'P-384'].includes(curve)) {
+            throw new Error('ECDSAはP-256/P-384のみ対応しています');
+        }
+
         return await window.crypto.subtle.generateKey(
             {
                 name: 'ECDSA',
@@ -43,24 +55,29 @@ export async function generateECDSAKeyPair(curve) {
         );
     } catch (error) {
         console.error('ECDSA鍵生成エラー:', error);
-        throw new Error(`ECDSA鍵の生成に失敗しました: ${error.message}`);
+        throw error;
     }
 }
 
 /**
  * EdDSA鍵ペアを生成
- * @param {string} curve - 楕円曲線（'Ed25519'/'Ed448'）
+ * @param {string} curve - 楕円曲線（'Ed25519'）
  * @returns {Promise<Object>} 生成された鍵ペア
  */
 export async function generateEdDSAKeyPair(curve) {
     try {
+        // 曲線の検証
+        if (curve !== 'Ed25519') {
+            throw new Error('EdDSAはEd25519のみ対応しています');
+        }
+
         return await openpgp.generateKey({
             type: curve.toLowerCase(),
             format: 'object'
         });
     } catch (error) {
         console.error('EdDSA鍵生成エラー:', error);
-        throw new Error(`EdDSA鍵の生成に失敗しました: ${error.message}`);
+        throw error;
     }
 }
 
@@ -98,7 +115,7 @@ export async function convertToPEM(keyPair, passphrase = '') {
         return { publicKey: publicPem, privateKey: privatePem };
     } catch (error) {
         console.error('PEM変換エラー:', error);
-        throw new Error(`PEM形式への変換に失敗しました: ${error.message}`);
+        throw error;
     }
 }
 
@@ -118,7 +135,7 @@ export async function convertToJWK(keyPair) {
         };
     } catch (error) {
         console.error('JWK変換エラー:', error);
-        throw new Error(`JWK形式への変換に失敗しました: ${error.message}`);
+        throw error;
     }
 }
 
@@ -131,12 +148,14 @@ export async function convertToJWK(keyPair) {
 export async function convertToSSH(keyPair, passphrase = '') {
     try {
         const publicKey = forge.ssh.publicKeyToOpenSSH(keyPair.publicKey);
-        const privateKey = forge.ssh.privateKeyToOpenSSH(keyPair.privateKey, passphrase);
+        const privateKey = passphrase
+            ? forge.ssh.privateKeyToOpenSSH(keyPair.privateKey, passphrase)
+            : forge.ssh.privateKeyToPem(keyPair.privateKey);
 
         return { publicKey, privateKey };
     } catch (error) {
         console.error('SSH変換エラー:', error);
-        throw new Error(`SSH形式への変換に失敗しました: ${error.message}`);
+        throw error;
     }
 }
 
@@ -157,7 +176,7 @@ export async function convertToOpenPGP(options) {
         return { publicKey, privateKey };
     } catch (error) {
         console.error('OpenPGP変換エラー:', error);
-        throw new Error(`OpenPGP形式への変換に失敗しました: ${error.message}`);
+        throw error;
     }
 }
 

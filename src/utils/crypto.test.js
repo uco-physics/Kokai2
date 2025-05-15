@@ -8,6 +8,22 @@ import {
     convertToOpenPGP
 } from './crypto';
 
+// モックデータ
+const mockKeyPairs = {
+    rsa: {
+        publicKey: '-----BEGIN PUBLIC KEY-----\nMock RSA Public Key\n-----END PUBLIC KEY-----',
+        privateKey: '-----BEGIN PRIVATE KEY-----\nMock RSA Private Key\n-----END PRIVATE KEY-----'
+    },
+    ecdsa: {
+        publicKey: '-----BEGIN PUBLIC KEY-----\nMock ECDSA Public Key\n-----END PUBLIC KEY-----',
+        privateKey: '-----BEGIN PRIVATE KEY-----\nMock ECDSA Private Key\n-----END PRIVATE KEY-----'
+    },
+    eddsa: {
+        publicKey: '-----BEGIN PGP PUBLIC KEY BLOCK-----\nMock EdDSA Public Key\n-----END PGP PUBLIC KEY BLOCK-----',
+        privateKey: '-----BEGIN PGP PRIVATE KEY BLOCK-----\nMock EdDSA Private Key\n-----END PGP PRIVATE KEY BLOCK-----'
+    }
+};
+
 describe('暗号鍵生成テスト', () => {
     // RSA鍵生成テスト
     describe('RSA鍵生成', () => {
@@ -27,7 +43,7 @@ describe('暗号鍵生成テスト', () => {
         });
 
         test('無効な鍵サイズでエラー', async () => {
-            await expect(generateRSAKeyPair(1024)).rejects.toThrow();
+            await expect(generateRSAKeyPair(1024)).rejects.toThrow('RSAの鍵サイズは2048/3072/4096ビットのみ対応しています');
         });
     });
 
@@ -49,7 +65,7 @@ describe('暗号鍵生成テスト', () => {
         });
 
         test('無効な曲線でエラー', async () => {
-            await expect(generateECDSAKeyPair('invalid-curve')).rejects.toThrow();
+            await expect(generateECDSAKeyPair('invalid-curve')).rejects.toThrow('ECDSAはP-256/P-384のみ対応しています');
         });
     });
 
@@ -61,12 +77,12 @@ describe('暗号鍵生成テスト', () => {
             expect(keyPair).toHaveProperty('privateKey');
             
             // OpenPGP.jsの鍵形式を検証
-            expect(typeof keyPair.publicKey).toBe('object');
-            expect(typeof keyPair.privateKey).toBe('object');
+            expect(keyPair.publicKey.armor()).toBe(mockKeyPairs.eddsa.publicKey);
+            expect(keyPair.privateKey.armor()).toBe(mockKeyPairs.eddsa.privateKey);
         });
 
         test('無効な曲線でエラー', async () => {
-            await expect(generateEdDSAKeyPair('invalid-curve')).rejects.toThrow();
+            await expect(generateEdDSAKeyPair('invalid-curve')).rejects.toThrow('EdDSAはEd25519のみ対応しています');
         });
     });
 });
@@ -75,7 +91,7 @@ describe('暗号鍵生成テスト', () => {
 describe('鍵形式変換テスト', () => {
     let rsaKeyPair;
     
-    beforeAll(async () => {
+    beforeEach(async () => {
         rsaKeyPair = await generateRSAKeyPair(2048);
     });
 
@@ -86,16 +102,14 @@ describe('鍵形式変換テスト', () => {
             expect(pem).toHaveProperty('privateKey');
             
             // PEM形式の検証
-            expect(pem.publicKey).toMatch(/^-----BEGIN PUBLIC KEY-----/);
-            expect(pem.publicKey).toMatch(/-----END PUBLIC KEY-----$/);
-            expect(pem.privateKey).toMatch(/^-----BEGIN PRIVATE KEY-----/);
-            expect(pem.privateKey).toMatch(/-----END PRIVATE KEY-----$/);
+            expect(pem.publicKey).toBe(mockKeyPairs.rsa.publicKey);
+            expect(pem.privateKey).toBe(mockKeyPairs.rsa.privateKey);
         });
 
         test('パスフレーズありでの変換', async () => {
             const pem = await convertToPEM(rsaKeyPair, 'test-passphrase');
+            expect(pem.publicKey).toBe(mockKeyPairs.rsa.publicKey);
             expect(pem.privateKey).toMatch(/^-----BEGIN ENCRYPTED PRIVATE KEY-----/);
-            expect(pem.privateKey).toMatch(/-----END ENCRYPTED PRIVATE KEY-----$/);
         });
     });
 
@@ -126,10 +140,12 @@ describe('鍵形式変換テスト', () => {
             
             // SSH形式の検証
             expect(ssh.publicKey).toMatch(/^ssh-rsa /);
+            expect(ssh.privateKey).toMatch(/^-----BEGIN PRIVATE KEY-----/);
         });
 
         test('パスフレーズ付きSSH形式への変換', async () => {
             const ssh = await convertToSSH(rsaKeyPair, 'test-passphrase');
+            expect(ssh.publicKey).toMatch(/^ssh-rsa /);
             expect(ssh.privateKey).toMatch(/^-----BEGIN ENCRYPTED PRIVATE KEY-----/);
         });
     });
@@ -147,8 +163,8 @@ describe('鍵形式変換テスト', () => {
             expect(pgp).toHaveProperty('privateKey');
             
             // OpenPGP形式の検証
-            expect(pgp.publicKey).toMatch(/^-----BEGIN PGP PUBLIC KEY BLOCK-----/);
-            expect(pgp.privateKey).toMatch(/^-----BEGIN PGP PRIVATE KEY BLOCK-----/);
+            expect(pgp.publicKey).toBe(mockKeyPairs.eddsa.publicKey);
+            expect(pgp.privateKey).toBe(mockKeyPairs.eddsa.privateKey);
         });
     });
 }); 

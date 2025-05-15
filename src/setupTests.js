@@ -1,10 +1,13 @@
 import '@testing-library/jest-dom';
+import { mockKeyPairs, mockMetadata, mockErrorMessages } from './utils/testHelpers';
 
 // CryptoKeyのモック
 class CryptoKey {
     constructor(type = 'public', algorithm = { name: 'RSA-OAEP' }) {
         this.type = type;
         this.algorithm = algorithm;
+        this.extractable = true;
+        this.usages = ['encrypt', 'decrypt', 'sign', 'verify'];
     }
 }
 
@@ -58,14 +61,17 @@ cryptoMock.subtle.generateKey.mockImplementation((algorithm, extractable, keyUsa
         case 'ECDSA':
             return Promise.resolve(mockECDSAKeyPair);
         default:
-            return Promise.reject(new Error('Unsupported algorithm'));
+            return Promise.reject(new Error(mockErrorMessages.browserNotSupported));
     }
 });
 
 // 鍵のエクスポート用モック
 cryptoMock.subtle.exportKey.mockImplementation((format, key) => {
-    const mockKeyData = new Uint8Array(32).fill(1);
-    return Promise.resolve(mockKeyData.buffer);
+    if (key.type === 'public') {
+        return Promise.resolve(new TextEncoder().encode(mockKeyPairs.rsa.publicKey).buffer);
+    } else {
+        return Promise.resolve(new TextEncoder().encode(mockKeyPairs.rsa.privateKey).buffer);
+    }
 });
 
 // FileReaderのモック
@@ -103,24 +109,28 @@ jest.mock('node-forge', () => ({
 }));
 
 // OpenPGP.jsのモック
-jest.mock('openpgp', () => {
-    const mockEdDSAKeyPair = {
+jest.mock('openpgp', () => ({
+    generateKey: jest.fn().mockResolvedValue({
         publicKey: {
-            armor: () => '-----BEGIN PGP PUBLIC KEY BLOCK-----\nMock EdDSA Public Key\n-----END PGP PUBLIC KEY BLOCK-----'
+            armor: () => mockKeyPairs.eddsa.publicKey
         },
         privateKey: {
-            armor: () => '-----BEGIN PGP PRIVATE KEY BLOCK-----\nMock EdDSA Private Key\n-----END PGP PRIVATE KEY BLOCK-----'
+            armor: () => mockKeyPairs.eddsa.privateKey
         }
-    };
+    }),
+    readKey: jest.fn().mockResolvedValue({
+        getPublicKey: () => ({ armor: () => mockKeyPairs.eddsa.publicKey }),
+        getPrivateKey: () => ({ armor: () => mockKeyPairs.eddsa.privateKey })
+    }),
+    createMessage: jest.fn(),
+    encrypt: jest.fn(),
+    decrypt: jest.fn()
+}));
 
-    return {
-        generateKey: jest.fn().mockResolvedValue(mockEdDSAKeyPair),
-        readKey: jest.fn().mockResolvedValue({
-            getPublicKey: () => mockEdDSAKeyPair.publicKey,
-            getPrivateKey: () => mockEdDSAKeyPair.privateKey
-        }),
-        createMessage: jest.fn(),
-        encrypt: jest.fn(),
-        decrypt: jest.fn()
-    };
-}); 
+// メタデータ生成のモック
+jest.mock('./utils/metadata', () => ({
+    generateMetadata: jest.fn().mockReturnValue(mockMetadata),
+    getSecurityInfo: jest.fn().mockReturnValue(mockMetadata.security),
+    getCompatibilityInfo: jest.fn().mockReturnValue(mockMetadata.compatibility),
+    getUsageInfo: jest.fn().mockReturnValue(mockMetadata.usage)
+})); 
