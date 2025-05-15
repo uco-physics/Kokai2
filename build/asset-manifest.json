@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/Kokai2/static/css/main.11ca8bce.css",
+    "main.js": "/Kokai2/static/js/main.971d9e5f.js",
+    "index.html": "/Kokai2/index.html",
+    "main.11ca8bce.css.map": "/Kokai2/static/css/main.11ca8bce.css.map",
+    "main.971d9e5f.js.map": "/Kokai2/static/js/main.971d9e5f.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.11ca8bce.css",
+    "static/js/main.971d9e5f.js"
+  ]
+}
