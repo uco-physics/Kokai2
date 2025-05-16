@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/Kokai2/static/css/main.9bc12ff0.css",
-    "main.js": "/Kokai2/static/js/main.136a4471.js",
+    "main.js": "/Kokai2/static/js/main.30ab9120.js",
     "index.html": "/Kokai2/index.html",
     "main.9bc12ff0.css.map": "/Kokai2/static/css/main.9bc12ff0.css.map",
-    "main.136a4471.js.map": "/Kokai2/static/js/main.136a4471.js.map"
+    "main.30ab9120.js.map": "/Kokai2/static/js/main.30ab9120.js.map"
   },
   "entrypoints": [
     "static/css/main.9bc12ff0.css",
-    "static/js/main.136a4471.js"
+    "static/js/main.30ab9120.js"
   ]
 }
