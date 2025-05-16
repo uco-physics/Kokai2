@@ -1,7 +1,7 @@
 /**
  * 暗号鍵生成に関するユーティリティ関数群
- * Web Crypto API、node-forge、openpgp.jsを使用し、RSA、ECDSA、EdDSAの鍵ペアを生成・変換
- * RSA/ECDSA/EdDSAをPEM/JWK/SSH/OpenPGP形式で出力
+ * Web Crypto API、node-forge、openpgp.jsを使用し、RSA、ECDSA、EdDSAの鍵ペアを生成
+ * パラメータに基づき、指定された形式（PEM/JWK/SSH/OpenPGP）で直接生成
  * 初心者向けに詳細なコメントを付与
  */
 import * as openpgp from 'openpgp';
@@ -9,26 +9,87 @@ import * as forge from 'node-forge';
 
 /**
  * RSA鍵ペアを生成
- * @param {number|string} size - 鍵サイズ（2048/3072/4096）
- * @returns {Promise<CryptoKeyPair>} 生成された鍵ペア（{ publicKey, privateKey }）
+ * @param {Object} params - 鍵生成パラメータ
+ * @param {string} params.keySize - 鍵サイズ（2048/3072/4096）
+ * @param {string} params.outputFormat - 出力形式（pem/jwk/ssh/pgp）
+ * @param {string} [params.passphrase] - 秘密鍵暗号化用パスフレーズ
+ * @returns {Promise<Object>} 生成された鍵ペア（{ publicKey, privateKey }）
  */
-export async function generateRSAKeyPair(size) {
+export async function generateRSAKeyPair({ keySize, outputFormat, passphrase = '' }) {
     try {
-        const keySize = Number(size);
-        if (![2048, 3072, 4096].includes(keySize)) {
+        const size = Number(keySize);
+        if (![2048, 3072, 4096].includes(size)) {
             throw new Error('RSAの鍵サイズは2048/3072/4096ビットのみ対応しています');
         }
 
-        return await window.crypto.subtle.generateKey(
-            {
-                name: 'RSA-OAEP',
-                modulusLength: keySize,
-                publicExponent: new Uint8Array([1, 0, 1]),
-                hash: 'SHA-256',
-            },
-            true,
-            ['encrypt', 'decrypt']
-        );
+        if (!['pem', 'jwk', 'ssh', 'pgp'].includes(outputFormat)) {
+            throw new Error('無効な出力形式: pem/jwk/ssh/pgpを指定してください');
+        }
+
+        let publicKey, privateKey;
+
+        if (outputFormat === 'pgp') {
+            // OpenPGP形式: openpgp.jsで直接生成
+            const { publicKey: pub, privateKey: priv } = await openpgp.generateKey({
+                type: 'rsa',
+                rsaBits: size,
+                userIds: [{ name: 'Generated Key', email: 'generated@example.com' }],
+                passphrase,
+                format: 'armored',
+            });
+            publicKey = pub;
+            privateKey = priv;
+        } else {
+            // Web Crypto APIでRSA鍵を生成（PEM/JWK/SSH用）
+            const keyPair = await window.crypto.subtle.generateKey(
+                {
+                    name: 'RSA-OAEP',
+                    modulusLength: size,
+                    publicExponent: new Uint8Array([1, 0, 1]), // 65537
+                    hash: 'SHA-256',
+                },
+                true,
+                ['encrypt', 'decrypt']
+            );
+
+            switch (outputFormat) {
+                case 'pem':
+                    const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+                    const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+                    publicKey = forge.pki.publicKeyToPem(
+                        forge.pki.publicKeyFromAsn1(forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki))))
+                    );
+                    privateKey = forge.pki.privateKeyToPem(
+                        forge.pki.privateKeyFromAsn1(forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8))))
+                    );
+                    if (passphrase) {
+                        privateKey = forge.pki.encryptRsaPrivateKey(
+                            forge.pki.privateKeyFromPem(privateKey),
+                            passphrase,
+                            { algorithm: 'aes256' }
+                        );
+                    }
+                    break;
+                case 'jwk':
+                    publicKey = JSON.stringify(await window.crypto.subtle.exportKey('jwk', keyPair.publicKey), null, 2);
+                    privateKey = JSON.stringify(await window.crypto.subtle.exportKey('jwk', keyPair.privateKey), null, 2);
+                    break;
+                case 'ssh':
+                    const sshSpki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+                    const sshPkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+                    const forgePublicKey = forge.pki.publicKeyFromAsn1(
+                        forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(sshSpki)))
+                    );
+                    const forgePrivateKey = forge.pki.privateKeyFromAsn1(
+                        forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(sshPkcs8)))
+                    );
+                    publicKey = forge.ssh.publicKeyToOpenSSH(forgePublicKey, 'rsa', 'generated@example.com');
+                    privateKey = forge.ssh.privateKeyToOpenSSH(forgePrivateKey, passphrase || undefined);
+                    break;
+            }
+        }
+
+        return { publicKey, privateKey };
     } catch (error) {
         console.error('[RSA鍵生成エラー]', error);
         throw error;
@@ -37,23 +98,87 @@ export async function generateRSAKeyPair(size) {
 
 /**
  * ECDSA鍵ペアを生成
- * @param {string} curve - 楕円曲線（'P-256'/'P-384'）
- * @returns {Promise<CryptoKeyPair>} 生成された鍵ペア（{ publicKey, privateKey }）
+ * @param {Object} params - 鍵生成パラメータ
+ * @param {string} params.keySize - 楕円曲線（P-256/P-384）
+ * @param {string} params.outputFormat - 出力形式（pem/jwk/ssh/pgp）
+ * @param {string} [params.passphrase] - 秘密鍵暗号化用パスフレーズ
+ * @returns {Promise<Object>} 生成された鍵ペア（{ publicKey, privateKey }）
  */
-export async function generateECDSAKeyPair(curve) {
+export async function generateECDSAKeyPair({ keySize, outputFormat, passphrase = '' }) {
     try {
-        if (!['P-256', 'P-384'].includes(curve)) {
+        if (!['P-256', 'P-384'].includes(keySize)) {
             throw new Error('ECDSAはP-256/P-384のみ対応しています');
         }
 
-        return await window.crypto.subtle.generateKey(
-            {
-                name: 'ECDSA',
-                namedCurve: curve,
-            },
-            true,
-            ['sign', 'verify']
-        );
+        if (!['pem', 'jwk', 'ssh', 'pgp'].includes(outputFormat)) {
+            throw new Error('無効な出力形式: pem/jwk/ssh/pgpを指定してください');
+        }
+
+        let publicKey, privateKey;
+
+        if (outputFormat === 'pgp') {
+            // OpenPGP形式: openpgp.jsで直接生成
+            const { publicKey: pub, privateKey: priv } = await openpgp.generateKey({
+                type: keySize.toLowerCase(),
+                userIds: [{ name: 'Generated Key', email: 'generated@example.com' }],
+                passphrase,
+                format: 'armored',
+            });
+            publicKey = pub;
+            privateKey = priv;
+        } else {
+            // Web Crypto APIでECDSA鍵を生成（PEM/JWK/SSH用）
+            const keyPair = await window.crypto.subtle.generateKey(
+                {
+                    name: 'ECDSA',
+                    namedCurve: keySize,
+                },
+                true,
+                ['sign', 'verify']
+            );
+
+            switch (outputFormat) {
+                case 'pem':
+                    const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+                    const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+                    publicKey = forge.pki.publicKeyToPem(
+                        forge.pki.publicKeyFromAsn1(forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki))))
+                    );
+                    privateKey = forge.pki.privateKeyToPem(
+                        forge.pki.privateKeyFromAsn1(forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8))))
+                    );
+                    if (passphrase) {
+                        privateKey = forge.pki.encryptPemPrivateKey(
+                            forge.pki.privateKeyFromPem(privateKey),
+                            passphrase,
+                            { algorithm: 'aes256' }
+                        );
+                    }
+                    break;
+                case 'jwk':
+                    publicKey = JSON.stringify(await window.crypto.subtle.exportKey('jwk', keyPair.publicKey), null, 2);
+                    privateKey = JSON.stringify(await window.crypto.subtle.exportKey('jwk', keyPair.privateKey), null, 2);
+                    break;
+                case 'ssh':
+                    const sshSpki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+                    const sshPkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+                    const forgePublicKey = forge.pki.publicKeyFromAsn1(
+                        forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(sshSpki)))
+                    );
+                    const forgePrivateKey = forge.pki.privateKeyFromAsn1(
+                        forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(sshPkcs8)))
+                    );
+                    publicKey = forge.ssh.publicKeyToOpenSSH(
+                        forgePublicKey,
+                        `ecdsa-sha2-nistp${keySize.toLowerCase().replace('p-', '')}`,
+                        'generated@example.com'
+                    );
+                    privateKey = forge.ssh.privateKeyToOpenSSH(forgePrivateKey, passphrase || undefined);
+                    break;
+            }
+        }
+
+        return { publicKey, privateKey };
     } catch (error) {
         console.error('[ECDSA鍵生成エラー]', error);
         throw error;
@@ -62,217 +187,52 @@ export async function generateECDSAKeyPair(curve) {
 
 /**
  * EdDSA鍵ペアを生成
- * @param {string} curve - 楕円曲線（'Ed25519'/'Ed448'）
- * @returns {Promise<Object>} 生成された鍵ペア（openpgp.js形式）
+ * @param {Object} params - 鍵生成パラメータ
+ * @param {string} params.keySize - 楕円曲線（Ed25519/Ed448）
+ * @param {string} params.outputFormat - 出力形式（pem/ssh/pgp）
+ * @param {string} [params.passphrase] - 秘密鍵暗号化用パスフレーズ
+ * @returns {Promise<Object>} 生成された鍵ペア（{ publicKey, privateKey }）
  */
-export async function generateEdDSAKeyPair(curve) {
+export async function generateEdDSAKeyPair({ keySize, outputFormat, passphrase = '' }) {
     try {
-        if (!['Ed25519', 'Ed448'].includes(curve)) {
+        if (!['Ed25519', 'Ed448'].includes(keySize)) {
             throw new Error('EdDSAはEd25519/Ed448のみ対応しています');
         }
 
+        if (!['pem', 'ssh', 'pgp'].includes(outputFormat)) {
+            throw new Error('無効な出力形式: pem/ssh/pgpを指定してください (EdDSAはJWK非対応)');
+        }
+
+        let publicKey, privateKey;
+
+        // openpgp.jsでEdDSA鍵を生成（PEM/SSH/PGP用）
         const key = await openpgp.generateKey({
-            type: curve.toLowerCase(),
+            type: keySize.toLowerCase(),
             userIds: [{ name: 'Generated Key', email: 'generated@example.com' }],
-            format: 'object',
+            passphrase,
+            format: 'armored',
         });
 
-        return {
-            publicKey: key.publicKey,
-            privateKey: key.privateKey,
-        };
+        switch (outputFormat) {
+            case 'pem':
+            case 'pgp':
+                publicKey = key.publicKey;
+                privateKey = key.privateKey;
+                break;
+            case 'ssh':
+                const pubKey = await openpgp.readKey({ armoredKey: key.publicKey });
+                const privKey = await openpgp.readPrivateKey({ armoredKey: key.privateKey });
+                const publicKeyBytes = pubKey.toPacketList().write();
+                publicKey = `ssh-${keySize.toLowerCase()} ${Buffer.from(publicKeyBytes).toString('base64')} generated@example.com`;
+                privateKey = passphrase
+                    ? (await openpgp.encryptKey({ privateKey: privKey, passphrase })).armor()
+                    : privKey.armor();
+                break;
+        }
+
+        return { publicKey, privateKey };
     } catch (error) {
         console.error('[EdDSA鍵生成エラー]', error);
-        throw error;
-    }
-}
-
-/**
- * 鍵をPEM形式に変換
- * @param {CryptoKeyPair|Object} keyPair - 変換する鍵ペア（{ publicKey, privateKey }）
- * @param {string} [passphrase] - 秘密鍵暗号化用パスフレーズ（オプション）
- * @returns {Promise<Object>} PEM形式の公開鍵と秘密鍵（{ publicKey, privateKey }）
- */
-export async function convertToPEM(keyPair, passphrase = '') {
-    try {
-        if (!keyPair || !keyPair.publicKey || !keyPair.privateKey) {
-            throw new Error('無効な鍵ペア: publicKeyまたはprivateKeyが欠けています');
-        }
-
-        let publicPem, privatePem;
-
-        if (keyPair.publicKey instanceof CryptoKey) {
-            // RSA/ECDSA
-            const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
-            const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-
-            publicPem = forge.pki.publicKeyToPem(
-                forge.pki.publicKeyFromAsn1(
-                    forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki)))
-                )
-            );
-
-            privatePem = forge.pki.privateKeyToPem(
-                forge.pki.privateKeyFromAsn1(
-                    forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8)))
-                )
-            );
-
-            if (passphrase) {
-                privatePem = forge.pki.encryptRsaPrivateKey(
-                    forge.pki.privateKeyFromPem(privatePem),
-                    passphrase,
-                    { algorithm: 'aes256' }
-                );
-            }
-        } else {
-            // EdDSA
-            publicPem = keyPair.publicKey.armor();
-            privatePem = passphrase
-                ? (await openpgp.encryptKey({ privateKey: keyPair.privateKey, passphrase })).armor()
-                : keyPair.privateKey.armor();
-        }
-
-        return { publicKey: publicPem, privateKey: privatePem };
-    } catch (error) {
-        console.error('[PEM変換エラー]', error);
-        throw error;
-    }
-}
-
-/**
- * 鍵をJWK形式に変換
- * @param {CryptoKeyPair} keyPair - 変換する鍵ペア（{ publicKey, privateKey }）
- * @returns {Promise<Object>} JWK形式の公開鍵と秘密鍵（{ publicKey, privateKey }）
- */
-export async function convertToJWK(keyPair) {
-    try {
-        if (!keyPair || !keyPair.publicKey || !keyPair.privateKey) {
-            throw new Error('無効な鍵ペア: publicKeyまたはprivateKeyが欠けています');
-        }
-
-        if (!(keyPair.publicKey instanceof CryptoKey)) {
-            throw new Error('JWK形式はRSAおよびECDSAのみ対応しています');
-        }
-
-        const publicJwk = await window.crypto.subtle.exportKey('jwk', keyPair.publicKey);
-        const privateJwk = await window.crypto.subtle.exportKey('jwk', keyPair.privateKey);
-
-        return {
-            publicKey: JSON.stringify(publicJwk, null, 2),
-            privateKey: JSON.stringify(privateJwk, null, 2),
-        };
-    } catch (error) {
-        console.error('[JWK変換エラー]', error);
-        throw error;
-    }
-}
-
-/**
- * 鍵をSSH形式（OpenSSH）に変換
- * @param {CryptoKeyPair|Object} keyPair - 変換する鍵ペア（{ publicKey, privateKey }）
- * @param {string} [passphrase] - 秘密鍵暗号化用パスフレーズ（オプション）
- * @returns {Promise<Object>} SSH形式の公開鍵と秘密鍵（{ publicKey, privateKey }）
- */
-export async function convertToSSH(keyPair, passphrase = '') {
-    try {
-        if (!keyPair || !keyPair.publicKey || !keyPair.privateKey) {
-            throw new Error('無効な鍵ペア: publicKeyまたはprivateKeyが欠けています');
-        }
-
-        let publicKey, privateKey;
-
-        if (keyPair.publicKey instanceof CryptoKey) {
-            // RSA/ECDSA
-            const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
-            const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-
-            const forgePublicKey = forge.pki.publicKeyFromAsn1(
-                forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki)))
-            );
-            const forgePrivateKey = forge.pki.privateKeyFromAsn1(
-                forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8)))
-            );
-
-            // 公開鍵のアルゴリズム名を設定
-            const algorithm =
-                keyPair.publicKey.algorithm.name === 'RSA-OAEP'
-                    ? 'rsa'
-                    : `ecdsa-sha2-nistp${keyPair.publicKey.algorithm.namedCurve.toLowerCase().replace('p-', '')}`;
-            publicKey = forge.ssh.publicKeyToOpenSSH(forgePublicKey, `generated@${algorithm}`);
-
-            // 秘密鍵は常にOpenSSH形式で出力
-            privateKey = forge.ssh.privateKeyToOpenSSH(forgePrivateKey, passphrase || undefined);
-        } else {
-            // EdDSA (Ed25519/Ed448)
-            const keyType = keyPair.publicKey.getAlgorithm().name === 'ED25519' ? 'ed25519' : 'ed448';
-            const publicKeyBytes = keyPair.publicKey.toPacketList().write();
-
-            // 公開鍵をOpenSSH形式に
-            publicKey = `ssh-${keyType} ${Buffer.from(publicKeyBytes).toString('base64')} generated@${keyType}`;
-
-            // 秘密鍵（簡易実装: PGP形式を使用）
-            privateKey = passphrase
-                ? (await openpgp.encryptKey({ privateKey: keyPair.privateKey, passphrase })).armor()
-                : keyPair.privateKey.armor();
-            // 注意: Ed25519の秘密鍵はOpenSSH形式（-----BEGIN OPENSSH PRIVATE KEY-----）が必要な場合、追加処理が必要
-        }
-
-        return { publicKey, privateKey };
-    } catch (error) {
-        console.error('[SSH変換エラー]', error);
-        throw error;
-    }
-}
-
-/**
- * 鍵をOpenPGP形式に変換
- * @param {CryptoKeyPair|Object} keyPair - 変換する鍵ペア（{ publicKey, privateKey }）
- * @param {string} [passphrase] - 秘密鍵暗号化用パスフレーズ（オプション）
- * @returns {Promise<Object>} OpenPGP形式の公開鍵と秘密鍵（{ publicKey, privateKey }）
- */
-export async function convertToOpenPGP(keyPair, passphrase = '') {
-    try {
-        if (!keyPair || !keyPair.publicKey || !keyPair.privateKey) {
-            throw new Error('無効な鍵ペア: publicKeyまたはprivateKeyが欠けています');
-        }
-
-        let publicKey, privateKey;
-
-        if (keyPair.publicKey instanceof CryptoKey) {
-            // RSA/ECDSA
-            const algorithm = keyPair.publicKey.algorithm.name;
-            let type;
-            if (algorithm === 'RSA-OAEP') {
-                type = 'rsa';
-            } else if (algorithm === 'ECDSA') {
-                type = keyPair.publicKey.algorithm.namedCurve.toLowerCase();
-            } else {
-                throw new Error('OpenPGP形式への変換はRSAまたはECDSAのみ対応しています');
-            }
-
-            const key = await openpgp.generateKey({
-                userIds: [{ name: 'Generated Key', email: 'generated@example.com' }],
-                type,
-                rsaBits: algorithm === 'RSA-OAEP' ? keyPair.publicKey.algorithm.modulusLength : undefined,
-                curve: algorithm === 'ECDSA' ? type : undefined,
-                passphrase,
-                format: 'armored',
-            });
-
-            publicKey = key.publicKey;
-            privateKey = key.privateKey;
-        } else {
-            // EdDSA
-            publicKey = keyPair.publicKey.armor();
-            privateKey = passphrase
-                ? (await openpgp.encryptKey({ privateKey: keyPair.privateKey, passphrase })).armor()
-                : keyPair.privateKey.armor();
-        }
-
-        return { publicKey, privateKey };
-    } catch (error) {
-        console.error('[OpenPGP変換エラー]', error);
         throw error;
     }
 }

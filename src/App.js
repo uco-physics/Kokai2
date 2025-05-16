@@ -11,15 +11,7 @@ import Step4 from './components/Step4';
 import Step5 from './components/Step5';
 import { createMetadata } from './utils/metadata';
 import { validateAll } from './utils/errorHandler';
-import {
-    generateRSAKeyPair,
-    generateECDSAKeyPair,
-    generateEdDSAKeyPair,
-    convertToPEM,
-    convertToJWK,
-    convertToSSH,
-    convertToOpenPGP,
-} from './utils/crypto';
+import { generateRSAKeyPair, generateECDSAKeyPair, generateEdDSAKeyPair } from './utils/crypto';
 import JSZip from 'jszip';
 
 // 言語テキスト（日本語/英語）
@@ -113,7 +105,7 @@ export default function App() {
     useDebugState('showResults', showResults, debugMode);
     useDebugState('error', error, debugMode);
 
-    // localStorageに状態を保存（単一のuseEffectで効率化）
+    // localStorageに状態を保存
     useEffect(() => {
         localStorage.setItem('step', step.toString());
         localStorage.setItem('keyType', keyType);
@@ -178,50 +170,22 @@ export default function App() {
                 throw new Error(validation.message);
             }
 
-            let keyPair;
+            let keys;
             if (debugMode) console.log('[Debug] Generating key pair for keyType:', keyType);
             switch (keyType) {
                 case 'rsa':
-                    keyPair = await generateRSAKeyPair(keySize); // crypto.jsで文字列を処理
+                    keys = await generateRSAKeyPair(params);
                     break;
                 case 'ecdsa':
-                    keyPair = await generateECDSAKeyPair(keySize);
+                    keys = await generateECDSAKeyPair(params);
                     break;
                 case 'eddsa':
-                    keyPair = await generateEdDSAKeyPair(keySize);
+                    keys = await generateEdDSAKeyPair(params);
                     break;
                 default:
                     throw new Error(texts[language].error + ': 無効な暗号方式');
             }
-            if (debugMode) console.log('[Debug] Generated key pair:', keyPair);
-
-            let publicKey, privateKey;
-            if (debugMode) console.log('[Debug] Converting to output format:', outputFormat);
-            switch (outputFormat) {
-                case 'pem':
-                    const pemKeys = await convertToPEM(keyPair, passphrase);
-                    publicKey = pemKeys.publicKey;
-                    privateKey = pemKeys.privateKey;
-                    break;
-                case 'jwk':
-                    const jwkKeys = await convertToJWK(keyPair);
-                    publicKey = jwkKeys.publicKey;
-                    privateKey = jwkKeys.privateKey;
-                    break;
-                case 'ssh':
-                    const sshKeys = await convertToSSH(keyPair, passphrase);
-                    publicKey = sshKeys.publicKey;
-                    privateKey = sshKeys.privateKey;
-                    break;
-                case 'pgp':
-                    const pgpKeys = await convertToOpenPGP(keyPair, passphrase);
-                    publicKey = pgpKeys.publicKey;
-                    privateKey = pgpKeys.privateKey;
-                    break;
-                default:
-                    throw new Error(texts[language].error + ': 無効な出力形式');
-            }
-            if (debugMode) console.log('[Debug] Converted keys:', { publicKey, privateKey });
+            if (debugMode) console.log('[Debug] Generated keys:', keys);
 
             const metadata = createMetadata({
                 keyType,
@@ -233,14 +197,17 @@ export default function App() {
             if (debugMode) console.log('[Debug] Generated metadata:', metadata);
 
             setGeneratedKeys({
-                publicKey,
-                privateKey,
+                publicKey: keys.publicKey,
+                privateKey: keys.privateKey,
                 metadata,
             });
             setShowResults(true);
         } catch (err) {
             if (debugMode) console.error('[Debug] Key generation failed:', err);
-            setError(`${texts[language].error}: ${err.message}`);
+            const errorMessage = err.message.includes('JWK形式')
+                ? `${texts[language].error}: ${err.message} (Ed25519/Ed448はJWKに対応していません)`
+                : `${texts[language].error}: ${err.message}`;
+            setError(errorMessage);
             setGeneratedKeys(null);
             setShowResults(false);
         } finally {
@@ -268,11 +235,380 @@ export default function App() {
         const { publicKey, privateKey, metadata } = generatedKeys;
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const prefix = `${keyType}_${keySize}_${timestamp}`;
-        const extension = outputFormat === 'jwk' ? 'json' : outputFormat === 'pgp' ? 'asc' : outputFormat;
+        const extension = outputFormat === 'jwk' ? 'json' : outputFormat === 'pgp' ? 'asc' : outputFormat === 'ssh' ? 'key' : outputFormat;
+        const publicExtension = outputFormat === 'ssh' ? 'pub' : extension;
 
         // ZIPアーカイブの作成
         const zip = new JSZip();
-        zip.file(`${prefix}_public.${extension}`, publicKey);
+        zip.file(`${prefix}_public.${publicExtension}`, publicKey);
+        zip.file(`${prefix}_private.${extension}`, privateKey);
+        zip.file(`${prefix}_metadata.json`, JSON.stringify(metadata, null, 2));
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        downloadFile(zipBlob, `${prefix}_keys.zip`);
+    };
+
+    // ステップのレンダリング
+    const renderStep = () => {
+        if (debugMode) {
+            console.log('[Debug] Rendering step:', step);
+            console.log('[Debug] Current params:', { keyType, keySize, outputFormat, passphrase });
+        }
+
+        switch (step) {
+            case 1:
+                return (
+                    <Step1
+                        selected={keyType}
+                        onSelect={setKeyTypeWithLog}
+                        onNext={handleNext}
+                        language={language}
+                    />
+                );
+            case 2:
+                return (
+                    <Step2
+                        keyType={keyType}
+                        selected={keySize}
+                        onSelect={setKeySizeWithLog}
+                        onBack={handleBack}
+                        onNext={handleNext}
+                        language={language}
+                    />
+                );
+            case 3:
+                return (
+                    <Step3
+                        keyType={keyType}
+                        keySize={keySize}
+                        selected={outputFormat}
+                        onSelect={setOutputFormatWithLog}
+                        onBack={handleBack}
+                        onNext={handleNext}
+                        language={language}
+                    />
+                );
+            case 4:
+                return (
+                    <Step4
+                        outputFormat={outputFormat}
+                        passphrase={passphrase}
+                        onSelect={setPassphraseWithLog}
+                        onBack={handleBack}
+                        onNext={handleNext}
+                        language={language}
+                    />
+                );
+            case 5:
+                return (
+                    <Step5
+                        params={{ keyType, keySize, outputFormat, passphrase }}
+                        onGenerate={handleGenerate}
+                        onBack={handleBack}
+                        isGenerating={isGenerating}
+                        language={language}
+                    />
+                );
+            default:
+                return null;
+        }
+    };
+
+    // 現在の選択状態を表示
+    const renderCurrentSelection = () => {
+        if (!keyType) return null;
+        return (
+            <div
+                className="bg-blue-50 p-4 rounded-lg mb-4"
+                role="status"
+                aria-live="polite"
+            >
+                <h3 className="font-bold">{texts[language].currentSelection}</h3>
+                <p>
+                    {keyType.toUpperCase()}
+                    {keySize && `, ${keySize}`}
+                    {outputFormat && `, ${outputFormat.toUpperCase()}`}
+                    {passphrase && `, ${texts[language].passphrase}: 設定済み`}
+                </p>
+            </div>
+        );
+    };
+
+    // エラーモーダル
+    const renderErrorModal = () => {
+        if (!error) return null;
+        return (
+            <div
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+                role="dialog"
+                aria-labelledby="error-title"
+                aria-describedby="error-message"
+            >
+                <div className="bg-white rounded-lg max-w-md w-full p-6">
+                    <h3 id="error-title" className="text-xl font-bold text-red-600">
+                        {texts[language].error}
+                    </h3>
+                    <p id="error-message" className="mt-2 text-gray-700">
+                        {error}
+                    </p>
+                    <button
+                        onClick={() => setError('')}
+                        className="mt-4 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                        autoFocus
+                    >
+                        {texts[language].close}
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto">
+                {/* ヘッダー */}
+                <header className="mb-8">
+                    <div className="flex justify-between items-center">
+                        <h1 className="text-2xl font-bold">{texts[language].title}</h1>
+                        <button
+                            onClick={() => setLanguage(language === 'ja' ? 'en' : 'ja')}
+                            className="px-3 py-1 border rounded-md hover:bg-gray-50"
+                            aria-label={texts[language].languageToggle}
+                        >
+                            {texts[language].languageToggle}
+                        </button>
+                    </div>
+                    {/* ステップインジケーター */}
+                    <div className="mt-4 flex space-x-2" role="navigation" aria-label="ステップ進行状況">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                            <div
+                                key={s}
+                                className={`h-2 flex-1 rounded-full ${
+                                    s <= step ? 'bg-blue-500' : 'bg-gray-200'
+                                }`}
+                                aria-current={s === step ? 'step' : undefined}
+                            />
+                        ))}
+                    </div>
+                </header>
+
+                {/* デバッグパネル */}
+                {debugMode && (
+                    <div className="bg-gray-100 p-4 mb-4 rounded-lg shadow">
+                        <h3 className="text-lg font-bold mb-2">[Debug Panel]</h3>
+                        <button
+                            onClick={() => setDebugMode(false)}
+                            className="mb-2 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                            aria-label="デバッグパネルを非表示"
+                        >
+                            Hide Debug Panel
+                        </button>
+                        <p><strong>Step:</strong> {step}</p>
+                        <p><strong>KeyType:</strong> {keyType || 'Not selected'}</p>
+                        <p><strong>KeySize:</strong> {keySize || 'Not selected'}</p>
+                        <p><strong>OutputFormat:</strong> {outputFormat || 'Not selected'}</p>
+                        <p><strong>Passphrase:</strong> {passphrase ? 'Set' : 'Not set'}</p>
+                        <p><strong>Language:</strong> {language}</p>
+                        <button
+                            onClick={() => {
+                                setStep(1);
+                                setKeyType('');
+                                setKeySize('');
+                                setOutputFormat('');
+                                setPassphrase('');
+                                setError('');
+                                setGeneratedKeys(null);
+                                setShowResults(false);
+                                if (debugMode) console.log('[Debug] State reset');
+                            }}
+                            className="mt-2 px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                            aria-label="状態をリセット"
+                        >
+                            {texts[language].reset}
+                        </button>
+                    </div>
+                )}
+                {!debugMode && (
+                    <button
+                        onClick={() => setDebugMode(true)}
+                        className="mb-4 px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        aria-label="デバッグパネルを表示"
+                    >
+                        Show Debug Panel
+                    </button>
+                )}
+
+                {/* メインコンテンツ */}
+                <main>
+                    {renderCurrentSelection()}
+                    <div className="bg-white shadow sm:rounded-lg">
+                        <div className="px-4 py-5 sm:p-6">{renderStep()}</div>
+                    </div>
+
+                    {/* 結果表示モーダル */}
+                    {showResults && generatedKeys && (
+                        <div
+                            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+                            role="dialog"
+                            aria-labelledby="result-title"
+                            ref={resultModalRef}
+                            tabIndex={-1}
+                        >
+                            <div className="bg-white rounded-lg max-w-2xl wivenza, setShowResults } = useState(false);
+    const [error, setError] = useState('');
+    const [debugMode, setDebugMode] = useState(true); // デバッグモード（本番ではfalse推奨）
+
+    // モーダルのフォーカス管理用
+    const resultModalRef = useRef(null);
+    const closeButtonRef = useRef(null);
+
+    // 状態変更をデバッグログに記録
+    useDebugState('step', step, debugMode);
+    useDebugState('keyType', keyType, debugMode);
+    useDebugState('keySize', keySize, debugMode);
+    useDebugState('outputFormat', outputFormat, debugMode);
+    useDebugState('passphrase', passphrase, debugMode);
+    useDebugState('language', language, debugMode);
+    useDebugState('isGenerating', isGenerating, debugMode);
+    useDebugState('showResults', showResults, debugMode);
+    useDebugState('error', error, debugMode);
+
+    // localStorageに状態を保存
+    useEffect(() => {
+        localStorage.setItem('step', step.toString());
+        localStorage.setItem('keyType', keyType);
+        localStorage.setItem('keySize', keySize);
+        localStorage.setItem('outputFormat', outputFormat);
+        localStorage.setItem('passphrase', passphrase);
+        localStorage.setItem('language', language);
+    }, [step, keyType, keySize, outputFormat, passphrase, language]);
+
+    // モーダル表示時のフォーカス管理
+    useEffect(() => {
+        if (showResults && closeButtonRef.current) {
+            closeButtonRef.current.focus();
+        }
+    }, [showResults]);
+
+    // ステップナビゲーション
+    const handleNext = () => {
+        if (debugMode) console.log('[Debug] handleNext called, current step:', step);
+        setStep((prev) => Math.min(prev + 1, 5));
+    };
+
+    const handleBack = () => {
+        if (debugMode) console.log('[Debug] handleBack called, current step:', step);
+        setStep((prev) => Math.max(prev - 1, 1));
+    };
+
+    // 状態設定関数（ログ付き）
+    const setKeyTypeWithLog = (value) => {
+        if (debugMode) console.log('[Debug] setKeyType called with:', value);
+        setKeyType(value);
+    };
+
+    const setKeySizeWithLog = (value) => {
+        if (debugMode) console.log('[Debug] setKeySize called with:', value);
+        setKeySize(value);
+    };
+
+    const setOutputFormatWithLog = (value) => {
+        if (debugMode) console.log('[Debug] setOutputFormat called with:', value);
+        setOutputFormat(value);
+    };
+
+    const setPassphraseWithLog = (value) => {
+        if (debugMode) console.log('[Debug] setPassphrase called with:', value);
+        setPassphrase(value);
+    };
+
+    // 鍵生成処理
+    const handleGenerate = async () => {
+        if (debugMode) {
+            console.log('[Debug] handleGenerate called with params:', { keyType, keySize, outputFormat, passphrase });
+            console.log('[Debug] keySize type:', typeof keySize, 'value:', keySize);
+        }
+        setIsGenerating(true);
+        setError('');
+        try {
+            const params = { keyType, keySize, outputFormat, passphrase };
+            const validation = validateAll(params);
+            if (debugMode) console.log('[Debug] Validation result:', validation);
+            if (!validation.isValid) {
+                throw new Error(validation.message);
+            }
+
+            let keys;
+            if (debugMode) console.log('[Debug] Generating key pair for keyType:', keyType);
+            switch (keyType) {
+                case 'rsa':
+                    keys = await generateRSAKeyPair(params);
+                    break;
+                case 'ecdsa':
+                    keys = await generateECDSAKeyPair(params);
+                    break;
+                case 'eddsa':
+                    keys = await generateEdDSAKeyPair(params);
+                    break;
+                default:
+                    throw new Error(texts[language].error + ': 無効な暗号方式');
+            }
+            if (debugMode) console.log('[Debug] Generated keys:', keys);
+
+            const metadata = createMetadata({
+                keyType,
+                keySize,
+                outputFormat,
+                passphrase: !!passphrase,
+                generatedAt: new Date().toISOString(),
+            });
+            if (debugMode) console.log('[Debug] Generated metadata:', metadata);
+
+            setGeneratedKeys({
+                publicKey: keys.publicKey,
+                privateKey: keys.privateKey,
+                metadata,
+            });
+            setShowResults(true);
+        } catch (err) {
+            if (debugMode) console.error('[Debug] Key generation failed:', err);
+            const errorMessage = err.message.includes('JWK形式')
+                ? `${texts[language].error}: ${err.message} (Ed25519/Ed448はJWKに対応していません)`
+                : `${texts[language].error}: ${err.message}`;
+            setError(errorMessage);
+            setGeneratedKeys(null);
+            setShowResults(false);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    // 単一ファイルのダウンロード
+    const downloadFile = (content, fileName) => {
+        if (debugMode) console.log('[Debug] Downloading file:', fileName);
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // 一括ZIPダウンロード
+    const downloadAll = async () => {
+        if (!generatedKeys) return;
+        if (debugMode) console.log('[Debug] Downloading all files');
+
+        const { publicKey, privateKey, metadata } = generatedKeys;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const prefix = `${keyType}_${keySize}_${timestamp}`;
+        const extension = outputFormat === 'jwk' ? 'json' : outputFormat === 'pgp' ? 'asc' : outputFormat === 'ssh' ? 'key' : outputFormat;
+        const publicExtension = outputFormat === 'ssh' ? 'pub' : extension;
+
+        // ZIPアーカイブの作成
+        const zip = new JSZip();
+        zip.file(`${prefix}_public.${publicExtension}`, publicKey);
         zip.file(`${prefix}_private.${extension}`, privateKey);
         zip.file(`${prefix}_metadata.json`, JSON.stringify(metadata, null, 2));
 
@@ -530,7 +866,7 @@ export default function App() {
                                                 downloadFile(
                                                     generatedKeys.publicKey,
                                                     `public_${keyType}_${keySize}.${
-                                                        outputFormat === 'jwk' ? 'json' : outputFormat === 'pgp' ? 'asc' : outputFormat
+                                                        outputFormat === 'jwk' ? 'json' : outputFormat === 'pgp' ? 'asc' : outputFormat === 'ssh' ? 'pub' : outputFormat
                                                     }`
                                                 )
                                             }
@@ -556,7 +892,7 @@ export default function App() {
                                                 downloadFile(
                                                     generatedKeys.privateKey,
                                                     `private_${keyType}_${keySize}.${
-                                                        outputFormat === 'jwk' ? 'json' : outputFormat === 'pgp' ? 'asc' : outputFormat
+                                                        outputFormat === 'jwk' ? 'json' : outputFormat === 'pgp' ? 'asc' : outputFormat === 'ssh' ? 'key' : outputFormat
                                                     }`
                                                 )
                                             }
