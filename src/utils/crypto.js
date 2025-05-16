@@ -13,7 +13,7 @@ import * as forge from 'node-forge';
 export async function generateRSAKeyPair(size) {
     try {
         // 鍵サイズの検証
-        if (![2048, 3072, 4096].includes(size)) {
+        if (![2048, 3072, 4096].includes(Number(size))) {
             throw new Error('RSAの鍵サイズは2048/3072/4096ビットのみ対応しています');
         }
 
@@ -87,11 +87,25 @@ export async function generateEdDSAKeyPair(curve) {
  * @param {string} passphrase - 秘密鍵暗号化用パスフレーズ（オプション）
  * @returns {Promise<Object>} PEM形式の公開鍵と秘密鍵
  */
+/**
+ * 鍵をPEM形式に変換
+ * @param {CryptoKeyPair} keyPair - 変換する鍵ペア（{ publicKey, privateKey }）
+ * @param {string} passphrase - 秘密鍵暗号化用パスフレーズ（オプション）
+ * @returns {Promise<Object>} PEM形式の公開鍵と秘密鍵
+ */
 export async function convertToPEM(keyPair, passphrase = '') {
     try {
+        // 入力の検証
+        if (!keyPair || !keyPair.publicKey || !keyPair.privateKey) {
+            throw new Error('無効な鍵ペア: publicKeyまたはprivateKeyが欠けています');
+        }
+
+        // 公開鍵をSPKI形式でエクスポート
         const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+        // 秘密鍵をPKCS#8形式でエクスポート
         const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
 
+        // node-forgeでPEM形式に変換
         const publicPem = forge.pki.publicKeyToPem(
             forge.pki.publicKeyFromAsn1(
                 forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki)))
@@ -104,6 +118,7 @@ export async function convertToPEM(keyPair, passphrase = '') {
             )
         );
 
+        // パスフレーズが指定されている場合、秘密鍵を暗号化
         if (passphrase) {
             privatePem = forge.pki.encryptRsaPrivateKey(
                 forge.pki.privateKeyFromPem(privatePem),
