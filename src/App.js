@@ -1,13 +1,13 @@
 /**
  * メインアプリケーションコンポーネント
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Step1 from './components/Step1';
 import Step2 from './components/Step2';
 import Step3 from './components/Step3';
 import Step4 from './components/Step4';
 import Step5 from './components/Step5';
-import { createMetadata } from './utils/metadata'; // 修正
+import { createMetadata } from './utils/metadata';
 import { validateAll } from './utils/errorHandler';
 import {
     generateRSAKeyPair,
@@ -19,41 +19,112 @@ import {
     convertToOpenPGP
 } from './utils/crypto';
 
+// デバッグ用カスタムフック
+const useDebugState = (name, value) => {
+    useEffect(() => {
+        console.log(`[Debug] ${name} updated:`, value);
+    }, [name, value]);
+    return value;
+};
 
 export default function App() {
-    const [step, setStep] = useState(1);
-    const [keyType, setKeyType] = useState('');
-    const [keySize, setKeySize] = useState('');
-    const [outputFormat, setOutputFormat] = useState('');
-    const [passphrase, setPassphrase] = useState('');
-    const [language, setLanguage] = useState('ja');
+    // 状態をlocalStorageから初期化
+    const [step, setStep] = useState(() => {
+        const saved = localStorage.getItem('step');
+        return saved ? parseInt(saved) : 1;
+    });
+    const [keyType, setKeyType] = useState(() => localStorage.getItem('keyType') || '');
+    const [keySize, setKeySize] = useState(() => localStorage.getItem('keySize') || '');
+    const [outputFormat, setOutputFormat] = useState(() => localStorage.getItem('outputFormat') || '');
+    const [passphrase, setPassphrase] = useState(() => localStorage.getItem('passphrase') || '');
+    const [language, setLanguage] = useState(() => localStorage.getItem('language') || 'ja');
     const [isGenerating, setIsGenerating] = useState(false);
-    const [generatedKeys, setGeneratedKeys] = useState(null); // 生成された鍵を保持
-    const [showResults, setShowResults] = useState(false); // 結果モーダルの表示制御
+    const [generatedKeys, setGeneratedKeys] = useState(null);
+    const [showResults, setShowResults] = useState(false);
+    const [debugMode, setDebugMode] = useState(true); // デバッグモードのトグル
+
+    // 状態変更時にログとlocalStorageに保存
+    useDebugState('step', step);
+    useDebugState('keyType', keyType);
+    useDebugState('keySize', keySize);
+    useDebugState('outputFormat', outputFormat);
+    useDebugState('passphrase', passphrase);
+    useDebugState('language', language);
+    useDebugState('isGenerating', isGenerating);
+    useDebugState('showResults', showResults);
+
+    useEffect(() => {
+        localStorage.setItem('step', step.toString());
+    }, [step]);
+    useEffect(() => {
+        localStorage.setItem('keyType', keyType);
+    }, [keyType]);
+    useEffect(() => {
+        localStorage.setItem('keySize', keySize);
+    }, [keySize]);
+    useEffect(() => {
+        localStorage.setItem('outputFormat', outputFormat);
+    }, [outputFormat]);
+    useEffect(() => {
+        localStorage.setItem('passphrase', passphrase);
+    }, [passphrase]);
+    useEffect(() => {
+        localStorage.setItem('language', language);
+    }, [language]);
 
     const handleNext = () => {
-        setStep(prev => Math.min(prev + 1, 5));
+        console.log('[Debug] handleNext called, current step:', step);
+        setStep(prev => {
+            const newStep = Math.min(prev + 1, 5);
+            console.log('[Debug] Moving to step:', newStep);
+            return newStep;
+        });
     };
 
     const handleBack = () => {
-        setStep(prev => Math.max(prev - 1, 1));
+        console.log('[Debug] handleBack called, current step:', step);
+        setStep(prev => {
+            const newStep = Math.max(prev - 1, 1);
+            console.log('[Debug] Moving to step:', newStep);
+            return newStep;
+        });
+    };
+
+    // 状態設定関数にログを追加
+    const setKeyTypeWithLog = (value) => {
+        console.log('[Debug] setKeyType called with:', value);
+        setKeyType(value);
+    };
+
+    const setKeySizeWithLog = (value) => {
+        console.log('[Debug] setKeySize called with:', value);
+        setKeySize(value);
+    };
+
+    const setOutputFormatWithLog = (value) => {
+        console.log('[Debug] setOutputFormat called with:', value);
+        setOutputFormat(value);
+    };
+
+    const setPassphraseWithLog = (value) => {
+        console.log('[Debug] setPassphrase called with:', value);
+        setPassphrase(value);
     };
 
     // 鍵生成処理
     const handleGenerate = async () => {
+        console.log('[Debug] handleGenerate called with params:', { keyType, keySize, outputFormat, passphrase });
         setIsGenerating(true);
         try {
-            // パラメータをまとめる
             const params = { keyType, keySize, outputFormat, passphrase };
-
-            // バリデーション（念のため再確認）
             const validation = validateAll(params);
+            console.log('[Debug] Validation result:', validation);
             if (!validation.isValid) {
                 throw new Error(validation.message);
             }
 
-            // 鍵生成
             let keyPair;
+            console.log('[Debug] Generating key pair for keyType:', keyType);
             switch (keyType) {
                 case 'rsa':
                     keyPair = await generateRSAKeyPair(keySize);
@@ -67,9 +138,10 @@ export default function App() {
                 default:
                     throw new Error('Invalid key type');
             }
+            console.log('[Debug] Generated key pair:', keyPair);
 
-            // 出力形式に変換
             let publicKey, privateKey;
+            console.log('[Debug] Converting to output format:', outputFormat);
             switch (outputFormat) {
                 case 'pem':
                     publicKey = convertToPEM(keyPair.publicKey, 'public');
@@ -90,27 +162,25 @@ export default function App() {
                 default:
                     throw new Error('Invalid output format');
             }
+            console.log('[Debug] Converted keys:', { publicKey, privateKey });
 
-            // メタデータ生成
-            const metadata = createMetadata({ // 修正
+            const metadata = createMetadata({
                 keyType,
                 keySize,
                 outputFormat,
                 passphrase: !!passphrase,
                 generatedAt: new Date().toISOString()
             });
+            console.log('[Debug] Generated metadata:', metadata);
 
-            // 生成結果を保存
             setGeneratedKeys({
                 publicKey,
                 privateKey,
                 metadata
             });
-
-            // 結果モーダルを表示
             setShowResults(true);
         } catch (err) {
-            console.error('Key generation failed:', err);
+            console.error('[Debug] Key generation failed:', err);
             setGeneratedKeys(null);
             setShowResults(false);
         } finally {
@@ -118,8 +188,8 @@ export default function App() {
         }
     };
 
-    // ファイルダウンロード処理
     const downloadFile = (content, fileName) => {
+        console.log('[Debug] Downloading file:', fileName);
         const blob = new Blob([content], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -129,9 +199,9 @@ export default function App() {
         URL.revokeObjectURL(url);
     };
 
-    // 一括ダウンロード（簡易版）
     const downloadAll = () => {
         if (!generatedKeys) return;
+        console.log('[Debug] Downloading all files');
         const { publicKey, privateKey, metadata } = generatedKeys;
         downloadFile(publicKey, `public_${keyType}_${keySize}.${outputFormat}`);
         downloadFile(privateKey, `private_${keyType}_${keySize}.${outputFormat}`);
@@ -139,12 +209,15 @@ export default function App() {
     };
 
     const renderStep = () => {
+        console.log('[Debug] Rendering step:', step);
+        console.log('[Debug] Current params:', { keyType, keySize, outputFormat, passphrase });
+
         switch (step) {
             case 1:
                 return (
                     <Step1
                         selected={keyType}
-                        onSelect={setKeyType}
+                        onSelect={setKeyTypeWithLog}
                         onNext={handleNext}
                         language={language}
                     />
@@ -154,7 +227,7 @@ export default function App() {
                     <Step2
                         keyType={keyType}
                         selected={keySize}
-                        onSelect={setKeySize}
+                        onSelect={setKeySizeWithLog}
                         onBack={handleBack}
                         onNext={handleNext}
                         language={language}
@@ -166,7 +239,7 @@ export default function App() {
                         keyType={keyType}
                         keySize={keySize}
                         selected={outputFormat}
-                        onSelect={setOutputFormat}
+                        onSelect={setOutputFormatWithLog}
                         onBack={handleBack}
                         onNext={handleNext}
                         language={language}
@@ -177,7 +250,7 @@ export default function App() {
                     <Step4
                         outputFormat={outputFormat}
                         passphrase={passphrase}
-                        onSelect={setPassphrase}
+                        onSelect={setPassphraseWithLog}
                         onBack={handleBack}
                         onNext={handleNext}
                         language={language}
@@ -201,6 +274,46 @@ export default function App() {
     return (
         <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-3xl mx-auto">
+                {/* デバッグパネル */}
+                {debugMode && (
+                    <div className="bg-gray-100 p-4 mb-4 rounded-lg shadow">
+                        <h3 className="text-lg font-bold mb-2">[Debug Panel]</h3>
+                        <button
+                            onClick={() => setDebugMode(false)}
+                            className="mb-2 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                        >
+                            Hide Debug Panel
+                        </button>
+                        <p><strong>Step:</strong> {step}</p>
+                        <p><strong>KeyType:</strong> {keyType || 'Not selected'}</p>
+                        <p><strong>KeySize:</strong> {keySize || 'Not selected'}</p>
+                        <p><strong>OutputFormat:</strong> {outputFormat || 'Not selected'}</p>
+                        <p><strong>Passphrase:</strong> {passphrase ? 'Set' : 'Not set'}</p>
+                        <p><strong>Language:</strong> {language}</p>
+                        <button
+                            onClick={() => {
+                                setStep(1);
+                                setKeyType('');
+                                setKeySize('');
+                                setOutputFormat('');
+                                setPassphrase('');
+                                console.log('[Debug] State reset');
+                            }}
+                            className="mt-2 px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                        >
+                            Reset State
+                        </button>
+                    </div>
+                )}
+                {!debugMode && (
+                    <button
+                        onClick={() => setDebugMode(true)}
+                        className="mb-4 px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    >
+                        Show Debug Panel
+                    </button>
+                )}
+
                 <div className="bg-white shadow sm:rounded-lg">
                     <div className="px-4 py-5 sm:p-6">
                         {renderStep()}
