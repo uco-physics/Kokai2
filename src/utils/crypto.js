@@ -52,19 +52,25 @@ export async function generateRSAKeyPair({ keySize, outputFormat, passphrase = '
                 ['encrypt', 'decrypt']
             );
 
+            // SPKI/PKCS#8をエクスポート
+            const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+            const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+
+            // node-forgeでパース
+            const forgePublicKey = forge.pki.publicKeyFromAsn1(
+                forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki)))
+            );
+            const forgePrivateKey = forge.pki.privateKeyFromAsn1(
+                forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8)))
+            );
+
             switch (outputFormat) {
                 case 'pem':
-                    const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
-                    const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-                    publicKey = forge.pki.publicKeyToPem(
-                        forge.pki.publicKeyFromAsn1(forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki))))
-                    );
-                    privateKey = forge.pki.privateKeyToPem(
-                        forge.pki.privateKeyFromAsn1(forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8))))
-                    );
+                    publicKey = forge.pki.publicKeyToPem(forgePublicKey);
+                    privateKey = forge.pki.privateKeyToPem(forgePrivateKey);
                     if (passphrase) {
                         privateKey = forge.pki.encryptRsaPrivateKey(
-                            forge.pki.privateKeyFromPem(privateKey),
+                            forgePrivateKey,
                             passphrase,
                             { algorithm: 'aes256' }
                         );
@@ -75,14 +81,6 @@ export async function generateRSAKeyPair({ keySize, outputFormat, passphrase = '
                     privateKey = JSON.stringify(await window.crypto.subtle.exportKey('jwk', keyPair.privateKey), null, 2);
                     break;
                 case 'ssh':
-                    const sshSpki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
-                    const sshPkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-                    const forgePublicKey = forge.pki.publicKeyFromAsn1(
-                        forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(sshSpki)))
-                    );
-                    const forgePrivateKey = forge.pki.privateKeyFromAsn1(
-                        forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(sshPkcs8)))
-                    );
                     publicKey = forge.ssh.publicKeyToOpenSSH(forgePublicKey, 'rsa', 'generated@example.com');
                     privateKey = forge.ssh.privateKeyToOpenSSH(forgePrivateKey, passphrase || undefined);
                     break;
@@ -137,19 +135,25 @@ export async function generateECDSAKeyPair({ keySize, outputFormat, passphrase =
                 ['sign', 'verify']
             );
 
+            // SPKI/PKCS#8をエクスポート
+            const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+            const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+
+            // node-forgeでパース
+            const forgePublicKey = forge.pki.publicKeyFromAsn1(
+                forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki)))
+            );
+            const forgePrivateKey = forge.pki.privateKeyFromAsn1(
+                forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8)))
+            );
+
             switch (outputFormat) {
                 case 'pem':
-                    const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
-                    const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-                    publicKey = forge.pki.publicKeyToPem(
-                        forge.pki.publicKeyFromAsn1(forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(spki))))
-                    );
-                    privateKey = forge.pki.privateKeyToPem(
-                        forge.pki.privateKeyFromAsn1(forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(pkcs8))))
-                    );
+                    publicKey = forge.pki.publicKeyToPem(forgePublicKey);
+                    privateKey = forge.pki.privateKeyToPem(forgePrivateKey);
                     if (passphrase) {
                         privateKey = forge.pki.encryptPemPrivateKey(
-                            forge.pki.privateKeyFromPem(privateKey),
+                            forgePrivateKey,
                             passphrase,
                             { algorithm: 'aes256' }
                         );
@@ -160,14 +164,6 @@ export async function generateECDSAKeyPair({ keySize, outputFormat, passphrase =
                     privateKey = JSON.stringify(await window.crypto.subtle.exportKey('jwk', keyPair.privateKey), null, 2);
                     break;
                 case 'ssh':
-                    const sshSpki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
-                    const sshPkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-                    const forgePublicKey = forge.pki.publicKeyFromAsn1(
-                        forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(sshSpki)))
-                    );
-                    const forgePrivateKey = forge.pki.privateKeyFromAsn1(
-                        forge.asn1.fromDer(forge.util.createBuffer(new Uint8Array(sshPkcs8)))
-                    );
                     publicKey = forge.ssh.publicKeyToOpenSSH(
                         forgePublicKey,
                         `ecdsa-sha2-nistp${keySize.toLowerCase().replace('p-', '')}`,
@@ -203,15 +199,15 @@ export async function generateEdDSAKeyPair({ keySize, outputFormat, passphrase =
             throw new Error('無効な出力形式: pem/ssh/pgpを指定してください (EdDSAはJWK非対応)');
         }
 
-        let publicKey, privateKey;
-
-        // openpgp.jsでEdDSA鍵を生成（PEM/SSH/PGP用）
+        // openpgp.jsでEdDSA鍵を生成
         const key = await openpgp.generateKey({
             type: keySize.toLowerCase(),
             userIds: [{ name: 'Generated Key', email: 'generated@example.com' }],
             passphrase,
             format: 'armored',
         });
+
+        let publicKey, privateKey;
 
         switch (outputFormat) {
             case 'pem':
@@ -221,12 +217,9 @@ export async function generateEdDSAKeyPair({ keySize, outputFormat, passphrase =
                 break;
             case 'ssh':
                 const pubKey = await openpgp.readKey({ armoredKey: key.publicKey });
-                const privKey = await openpgp.readPrivateKey({ armoredKey: key.privateKey });
                 const publicKeyBytes = pubKey.toPacketList().write();
                 publicKey = `ssh-${keySize.toLowerCase()} ${Buffer.from(publicKeyBytes).toString('base64')} generated@example.com`;
-                privateKey = passphrase
-                    ? (await openpgp.encryptKey({ privateKey: privKey, passphrase })).armor()
-                    : privKey.armor();
+                privateKey = key.privateKey; // 簡易形式（PGP形式）
                 break;
         }
 
