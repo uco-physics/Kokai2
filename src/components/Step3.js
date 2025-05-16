@@ -118,11 +118,15 @@ const outputFormats = [
  * @param {function} props.onSelect - 選択時のコールバック
  * @param {string} props.selected - 現在選択されている値
  * @param {function} props.onBack - 戻るボタンのコールバック
+ * @param {function} props.onNext - 次のステップに進むコールバック
  * @param {string} props.language - 表示言語
  */
-export default function Step3({ keyType, keySize, onSelect, selected, onBack, language }) {
+export default function Step3({ keyType, keySize, onSelect, selected, onBack, onNext, language }) {
     const [showDetails, setShowDetails] = useState(null);
     const [error, setError] = useState('');
+
+    // デバッグ：コンポーネントの初期化時に渡されたプロパティをログ出力
+    console.log('[Step3 Debug] Component initialized with props:', { keyType, keySize, selected, language });
 
     // 言語に応じたテキストを取得
     const texts = {
@@ -133,6 +137,7 @@ export default function Step3({ keyType, keySize, onSelect, selected, onBack, la
             features: '主な特徴',
             useCases: '使用例',
             back: '戻る',
+            next: '次へ',
             close: '閉じる',
             error: 'この形式は選択された暗号方式では使用できません'
         },
@@ -143,36 +148,79 @@ export default function Step3({ keyType, keySize, onSelect, selected, onBack, la
             features: 'Features',
             useCases: 'Use Cases',
             back: 'Back',
+            next: 'Next',
             close: 'Close',
             error: 'This format is not available for the selected cryptography type'
         }
     }[language];
 
+    console.log('[Step3 Debug] Language texts:', texts);
+
+    // keyTypeまたはkeySizeが無効な場合のエラーメッセージ
+    console.log('[Step3 Debug] Checking keyType and keySize:', { keyType, keySize });
+    if (!keyType || !keySize) {
+        console.log('[Step3 Debug] keyType or keySize is invalid, rendering error message');
+        return (
+            <div className="space-y-6">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold">{texts.title}</h2>
+                    <p className="text-gray-600 mt-2">{texts.subtitle}</p>
+                </div>
+                <div className="p-4 bg-red-50 text-red-700 rounded-lg">
+                    {language === 'ja'
+                        ? '暗号方式または鍵サイズが選択されていません。前のステップに戻ってください。'
+                        : 'Cryptography type or key size is not selected. Please go back to the previous step.'}
+                </div>
+                <div className="flex justify-start">
+                    <button
+                        onClick={onBack}
+                        className="px-4 py-2 text-blue-600 hover:text-blue-800"
+                    >
+                        {texts.back}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     // 形式の選択時の処理
     const handleSelect = (format) => {
+        console.log('[Step3 Debug] handleSelect called with format:', format);
         const validation = validateOutputFormat({ keyType, keySize, outputFormat: format });
+        console.log('[Step3 Debug] Validation result:', validation);
         if (!validation.isValid) {
+            console.log('[Step3 Debug] Validation failed, setting error:', validation.message);
             setError(validation.message);
             return;
         }
+        console.log('[Step3 Debug] Validation passed, clearing error and calling onSelect');
         setError('');
         onSelect(format);
     };
 
+    // デバッグ：レンダリング開始
+    console.log('[Step3 Debug] Rendering main UI with keyType:', keyType, 'keySize:', keySize);
+
     return (
         <div className="space-y-6">
+            {console.log('Step3 keyType:', keyType)}
+            {console.log('Step3 keySize:', keySize)}
+            {console.log('Step3 selected:', selected)}
             <div className="text-center">
+                {console.log('[Step3 Debug] Rendering title and subtitle')}
                 <h2 className="text-2xl font-bold">{texts.title}</h2>
                 <p className="text-gray-600 mt-2">{texts.subtitle}</p>
             </div>
 
             {error && (
                 <div className="p-4 bg-red-50 text-red-700 rounded-lg">
+                    {console.log('[Step3 Debug] Rendering error message:', error)}
                     {error}
                 </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {console.log('[Step3 Debug] Rendering output format options')}
                 {outputFormats.map(format => {
                     const validation = validateOutputFormat({
                         keyType,
@@ -181,10 +229,26 @@ export default function Step3({ keyType, keySize, onSelect, selected, onBack, la
                     });
                     const isDisabled = !validation.isValid;
 
+                    console.log('[Step3 Debug] Rendering format:', format.value, 'isDisabled:', isDisabled);
+
                     return (
                         <div key={format.value} className="relative">
                             <button
                                 onClick={() => handleSelect(format.value)}
+                                onDoubleClick={() => {
+                                    console.log('[Step3 Debug] Double-click on format:', format.value, 'isDisabled:', isDisabled, 'selected:', selected);
+                                    if (!isDisabled && selected) {
+                                        console.log('[Step3 Debug] Double-click: Proceeding to next step');
+                                        onNext();
+                                    } else if (!selected) {
+                                        console.log('[Step3 Debug] Double-click: No format selected, showing alert');
+                                        alert(
+                                            language === 'ja'
+                                                ? '出力形式を選択してください'
+                                                : 'Please select an output format'
+                                        );
+                                    }
+                                }}
                                 disabled={isDisabled}
                                 className={`w-full p-4 border rounded-lg transition-colors ${
                                     isDisabled
@@ -198,7 +262,10 @@ export default function Step3({ keyType, keySize, onSelect, selected, onBack, la
                                 <div className="text-sm text-gray-600 mt-1">{format.description}</div>
                             </button>
                             <button
-                                onClick={() => setShowDetails(format.value)}
+                                onClick={() => {
+                                    console.log('[Step3 Debug] Showing details for format:', format.value);
+                                    setShowDetails(format.value);
+                                }}
                                 disabled={isDisabled}
                                 className={`absolute top-2 right-2 p-1 ${
                                     isDisabled
@@ -216,12 +283,39 @@ export default function Step3({ keyType, keySize, onSelect, selected, onBack, la
                 })}
             </div>
 
-            <div className="flex justify-start">
+            {console.log('[Step3 Debug] Rendering navigation buttons with selected:', selected)}
+            {console.log('[Step3 Debug] Navigation buttons classes:', 'flex justify-between')}
+            <div className="flex justify-between">
+                {console.log('[Step3 Debug] Rendering Back button')}
                 <button
-                    onClick={onBack}
+                    onClick={() => {
+                        console.log('[Step3 Debug] Back button clicked');
+                        onBack();
+                    }}
                     className="px-4 py-2 text-blue-600 hover:text-blue-800"
                 >
                     {texts.back}
+                </button>
+                {console.log('[Step3 Debug] Rendering Next button with disabled:', !selected)}
+                <button
+                    onClick={() => {
+                        console.log('[Step3 Debug] Next button clicked, selected:', selected);
+                        if (selected) {
+                            console.log('[Step3 Debug] Next button: Proceeding to next step');
+                            onNext();
+                        } else {
+                            console.log('[Step3 Debug] Next button: No format selected, showing alert');
+                            alert(
+                                language === 'ja'
+                                    ? '出力形式を選択してください'
+                                    : 'Please select an output format'
+                            );
+                        }
+                    }}
+                    disabled={!selected}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+                >
+                    {texts.next}
                 </button>
             </div>
 
@@ -229,12 +323,16 @@ export default function Step3({ keyType, keySize, onSelect, selected, onBack, la
             {showDetails && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+                        {console.log('[Step3 Debug] Rendering details modal for:', showDetails)}
                         <div className="flex justify-between items-start">
                             <h3 className="text-xl font-bold">
                                 {outputFormats.find(f => f.value === showDetails).details.title}
                             </h3>
                             <button
-                                onClick={() => setShowDetails(null)}
+                                onClick={() => {
+                                    console.log('[Step3 Debug] Closing details modal');
+                                    setShowDetails(null);
+                                }}
                                 className="text-gray-500 hover:text-gray-700"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -284,4 +382,4 @@ export default function Step3({ keyType, keySize, onSelect, selected, onBack, la
             )}
         </div>
     );
-} 
+}
