@@ -93,6 +93,12 @@ export async function generateEdDSAKeyPair(curve) {
  * @param {string} passphrase - 秘密鍵暗号化用パスフレーズ（オプション）
  * @returns {Promise<Object>} PEM形式の公開鍵と秘密鍵
  */
+/**
+ * 鍵をPEM形式に変換
+ * @param {CryptoKeyPair} keyPair - 変換する鍵ペア（{ publicKey, privateKey }）
+ * @param {string} passphrase - 秘密鍵暗号化用パスフレーズ（オプション）
+ * @returns {Promise<Object>} PEM形式の公開鍵と秘密鍵
+ */
 export async function convertToPEM(keyPair, passphrase = '') {
     try {
         // 入力の検証

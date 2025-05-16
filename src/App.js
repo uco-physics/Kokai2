@@ -123,7 +123,7 @@ export default function App() {
             if (!validation.isValid) {
                 throw new Error(validation.message);
             }
-
+    
             let keyPair;
             console.log('[Debug] Generating key pair for keyType:', keyType);
             switch (keyType) {
@@ -131,40 +131,44 @@ export default function App() {
                     keyPair = await generateRSAKeyPair(Number(keySize));
                     break;
                 case 'ecdsa':
-                    keyPair = await generateECDSAKeyPair(Number(keySize));
+                    keyPair = await generateECDSAKeyPair(keySize);
                     break;
                 case 'eddsa':
-                    keyPair = await generateEdDSAKeyPair(Number(keySize));
+                    keyPair = await generateEdDSAKeyPair(keySize);
                     break;
                 default:
                     throw new Error('Invalid key type');
             }
             console.log('[Debug] Generated key pair:', keyPair);
-
+    
             let publicKey, privateKey;
             console.log('[Debug] Converting to output format:', outputFormat);
             switch (outputFormat) {
                 case 'pem':
-                    publicKey = convertToPEM(keyPair.publicKey, 'public');
-                    privateKey = convertToPEM(keyPair.privateKey, 'private', passphrase);
+                    const pemKeys = await convertToPEM(keyPair, passphrase);
+                    publicKey = pemKeys.publicKey;
+                    privateKey = pemKeys.privateKey;
                     break;
                 case 'jwk':
-                    publicKey = convertToJWK(keyPair.publicKey);
-                    privateKey = convertToJWK(keyPair.privateKey);
+                    const jwkKeys = await convertToJWK(keyPair);
+                    publicKey = jwkKeys.publicKey;
+                    privateKey = jwkKeys.privateKey;
                     break;
                 case 'ssh':
-                    publicKey = convertToSSH(keyPair.publicKey);
-                    privateKey = convertToSSH(keyPair.privateKey);
+                    const sshKeys = await convertToSSH(keyPair);
+                    publicKey = sshKeys.publicKey;
+                    privateKey = sshKeys.privateKey;
                     break;
                 case 'pgp':
-                    publicKey = await convertToOpenPGP(keyPair.publicKey, 'public');
-                    privateKey = await convertToOpenPGP(keyPair.privateKey, 'private', passphrase);
+                    const pgpKeys = await convertToOpenPGP(keyPair, passphrase);
+                    publicKey = pgpKeys.publicKey;
+                    privateKey = pgpKeys.privateKey;
                     break;
                 default:
                     throw new Error('Invalid output format');
             }
             console.log('[Debug] Converted keys:', { publicKey, privateKey });
-
+    
             const metadata = createMetadata({
                 keyType,
                 keySize,
@@ -173,7 +177,7 @@ export default function App() {
                 generatedAt: new Date().toISOString()
             });
             console.log('[Debug] Generated metadata:', metadata);
-
+    
             setGeneratedKeys({
                 publicKey,
                 privateKey,
@@ -182,6 +186,7 @@ export default function App() {
             setShowResults(true);
         } catch (err) {
             console.error('[Debug] Key generation failed:', err);
+            alert(`鍵生成に失敗しました: ${err.message}`);
             setGeneratedKeys(null);
             setShowResults(false);
         } finally {
