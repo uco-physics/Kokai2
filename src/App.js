@@ -114,6 +114,7 @@ export default function App() {
     // 鍵生成処理
     const handleGenerate = async () => {
         console.log('[Debug] handleGenerate called with params:', { keyType, keySize, outputFormat, passphrase });
+        console.log('[Debug] keySize type:', typeof keySize, 'value:', keySize);
         setIsGenerating(true);
         try {
             const params = { keyType, keySize, outputFormat, passphrase };
@@ -127,13 +128,13 @@ export default function App() {
             console.log('[Debug] Generating key pair for keyType:', keyType);
             switch (keyType) {
                 case 'rsa':
-                    keyPair = await generateRSAKeyPair(keySize);
+                    keyPair = await generateRSAKeyPair(Number(keySize));
                     break;
                 case 'ecdsa':
-                    keyPair = await generateECDSAKeyPair(keySize);
+                    keyPair = await generateECDSAKeyPair(Number(keySize));
                     break;
                 case 'eddsa':
-                    keyPair = await generateEdDSAKeyPair(keySize);
+                    keyPair = await generateEdDSAKeyPair(Number(keySize));
                     break;
                 default:
                     throw new Error('Invalid key type');
